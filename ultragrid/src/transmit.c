@@ -103,7 +103,7 @@ void tx_done(struct video_tx *tx)
 }
 
 void
-tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
+tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp **rtp_sessions)
 {
         int m, data_len;
         payload_hdr_t payload_hdr;
@@ -111,6 +111,7 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
         static uint32_t ts = 0;
         char *data;
         unsigned int pos;
+	struct rtp ** current_session = rtp_sessions;
 #if HAVE_MACOSX
         struct timeval start, stop;
 #else                           /* HAVE_MACOSX */
@@ -143,7 +144,7 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
                 pos += data_len;
                 payload_hdr.length = htons(data_len);
                 GET_STARTTIME;
-                rtp_send_data_hdr(rtp_session, ts, pt, m, 0, 0,
+                rtp_send_data_hdr(*current_session, ts, pt, m, 0, 0,
                                   (char *)&payload_hdr, sizeof(payload_hdr_t),
                                   data, data_len, 0, 0, 0);
                 do {
@@ -152,6 +153,10 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
                         if (delta < 0)
                                 delta += 1000000000L;
                 } while (packet_rate - delta > 0);
+
+		if(*++current_session == NULL) {
+			current_session = rtp_sessions;
+		}
 
         } while (pos < frame->data_len);
 }

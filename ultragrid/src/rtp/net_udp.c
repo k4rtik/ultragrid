@@ -881,7 +881,7 @@ static int udp_do_recv(socket_udp * s, char *buffer, int buflen, int flags)
         assert(buffer != NULL);
         assert(buflen > 0);
 
-        len = recvfrom(s->fd, buffer, buflen, flags, 0, 0);
+        len = recv(s->fd, buffer, buflen, flags);
         if (len > 0) {
                 return len;
         }

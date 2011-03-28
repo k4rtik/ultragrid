@@ -195,8 +195,18 @@ void rtp_recv_callback(struct rtp *session, rtp_event * e)
         rtcp_app *pckt_app = (rtcp_app *) e->data;
         rtp_packet *pckt_rtp = (rtp_packet *) e->data;
         struct pdb *participants = (struct pdb *)rtp_get_userdata(session);
-        struct pdb_e *state = pdb_get(participants, e->ssrc);
-        struct timeval curr_time;
+	/* Silly, but causes we have all connection rendered in 
+	 * the "good" framebuffer. */
+        static struct pdb_e *state = NULL;
+	if(state == NULL) {
+		state = pdb_get(participants, e->ssrc);
+		if(state != NULL)
+			debug_msg("Adding %08x as persistent display source.\n", 
+				e->ssrc);
+	}
+        /*struct pdb_e *state = pdb_get(participants, e->ssrc);*/
+        
+	struct timeval curr_time;
 
         switch (e->type) {
         case RX_RTP:
