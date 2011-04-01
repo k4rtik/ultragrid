@@ -56,8 +56,8 @@ extern "C" {
 #include "tv.h"
 
 #include "debug.h"
-#include "video_types.h"
 #include "video_capture.h"
+#include "video_codec.h"
 
 #ifdef __cplusplus
 } // END of extern "C"
@@ -71,10 +71,9 @@ extern "C" {
 
 #define FRAME_TIMEOUT 60000000 // 30000000 // in nanoseconds
 
-unsigned int init_hd_color_bpp = 2; // hd_color_bpp;
-
-static int	device = 0; // use first BlackMagic device
-static int	mode = 5; // hd_video_mode; // 0; // It should need 5 .... 1080i50 or 6 .... 1080i59.94 // 5 .... for intensity // 7 .... for blackmagic
+// static int	device = 0; // use first BlackMagic device
+// static int	mode = 5; // for Intensity
+// static int	mode = 6; // for Decklink  6) HD 1080i 59.94; 1920 x 1080; 29.97 FPS 7) HD 1080i 60; 1920 x 1080; 30 FPS
 static int	connection = 0; // the choice of BMDVideoConnection // It should be 0 .... bmdVideoConnectionSDI
 
 int frames = 0;
@@ -139,16 +138,22 @@ public:
 struct vidcap_decklink_state {
 	IDeckLink*		deckLink;
 	IDeckLinkInput*		deckLinkInput;
+	int			device;
+	int			mode;
 	// void*			rtp_buffer;
-	int			buffer_size;
 	VideoDelegate*		delegate;
-	unsigned int		hd_size_x;
-	unsigned int		hd_size_y;
 	unsigned int		next_frame_time; // avarege time between frames
 	pthread_mutex_t	 	lock;
 	pthread_cond_t	 	boss_cv;
 	int		 	boss_waiting;
+        struct video_frame      frame;
+        const struct codec_info_t *c_info;
 };
+
+/* DeckLink SDK objects */
+
+void
+print_output_modes (IDeckLink* deckLink);
 
 HRESULT	
 VideoDelegate::VideoInputFrameArrived (IDeckLinkVideoInputFrame *arrivedFrame, IDeckLinkAudioInputPacket *audioPacket)
@@ -163,7 +168,7 @@ VideoDelegate::VideoInputFrameArrived (IDeckLinkVideoInputFrame *arrivedFrame, I
 	{
 		if (arrivedFrame->GetFlags() & bmdFrameHasNoInputSource)
 		{
-			// fprintf(stderr, "Frame received (#%lu) - No input signal detected\n", framecount);
+			fprintf(stderr, "Frame received (#%d) - No input signal detected\n", frames);
 		}
 		else{
 			// printf("Frame received (#%lu) - Valid Frame (Size: %li bytes)\n", framecount, arrivedFrame->GetRowBytes() * arrivedFrame->GetHeight());
@@ -205,6 +210,129 @@ void VideoDelegate::set_vidcap_state(vidcap_decklink_state	*state){
 	s = state;
 }
 
+/* HELP */
+
+int
+decklink_help()
+{
+	IDeckLinkIterator*		deckLinkIterator;
+	IDeckLink*			deckLink;
+	int				numDevices = 0;
+	HRESULT				result;
+
+	printf("Decklink options:\n");
+	printf("\tdevice:mode\n");
+	
+	// Create an IDeckLinkIterator object to enumerate all DeckLink cards in the system
+	deckLinkIterator = CreateDeckLinkIteratorInstance();
+	if (deckLinkIterator == NULL)
+	{
+		fprintf(stderr, "A DeckLink iterator could not be created.  The DeckLink drivers may not be installed.\n");
+		return 0;
+	}
+	
+	// Enumerate all cards in this system
+	while (deckLinkIterator->Next(&deckLink) == S_OK)
+	{
+		char *		deviceNameString = NULL;
+		
+		
+		// *** Print the model name of the DeckLink card
+		result = deckLink->GetModelName((const char **) &deviceNameString);
+		if (result == S_OK)
+		{
+			printf("\ndevice: %d.) %s \n\n",numDevices, deviceNameString);
+			free(deviceNameString);
+		}
+		
+		// Increment the total number of DeckLink cards found
+		numDevices++;
+	
+		// ** List the video output display modes supported by the card
+		print_output_modes(deckLink);
+				
+		// Release the IDeckLink instance when we've finished with it to prevent leaks
+		deckLink->Release();
+	}
+	
+	deckLinkIterator->Release();
+
+	// If no DeckLink cards were found in the system, inform the user
+	if (numDevices == 0)
+	{
+		printf("\nNo Blackmagic Design devices were found.\n");
+		return 0;
+	} else {
+                printf("Available Colorspaces:\n");
+                printf("\t2vuy\n");
+                printf("\tv210\n");
+                printf("\tRGBA\n");
+                printf("\tR10k\n");
+        }
+	printf("\n");
+
+	return 1;
+}
+
+/* SETTINGS */
+
+int
+settings_init(void *state, char *fmt)
+{
+	struct vidcap_decklink_state *s = (struct vidcap_decklink_state *) state;
+
+	if(strcmp(fmt, "help")==0) {
+		decklink_help();
+		return 0;
+	}
+
+	char *tmp;
+
+	// choose device
+	tmp = strtok(fmt, ":");
+	if(!tmp) {
+		fprintf(stderr, "Wrong config %s\n", fmt);
+		return 0;
+	}
+	s->device = atoi(tmp);
+
+	// choose mode
+	tmp = strtok(NULL, ":");
+	if(!tmp) {
+		fprintf(stderr, "Wrong config %s\n", fmt);
+		return 0;
+	}
+	s->mode = atoi(tmp);
+
+	tmp = strtok(NULL, ":");
+        s->c_info = 0;
+        if(!tmp) {
+                int i;
+                for(i=0; codec_info[i].name != NULL; i++) {
+                    if(codec_info[i].codec == Vuy2) {
+                        s->c_info = &codec_info[i];
+                        s->frame.color_spec = codec_info[i].codec;
+                        break;
+                    }
+                }
+        } else {
+                int i;
+                for(i=0; codec_info[i].name != NULL; i++) {
+                    if(strcmp(codec_info[i].name, tmp) == 0) {
+                         s->c_info = &codec_info[i];
+                         s->frame.color_spec = codec_info[i].codec;
+                         break;
+                    }
+                }
+                if(s->c_info == 0) {
+			fprintf(stderr, "Wrong config. Unknown color space %s\n", tmp);
+                	return 0;
+                }
+        }
+
+	return 1;	
+}
+
 /* External API ***************************************************************/
 
 struct vidcap_type *
@@ -212,96 +340,12 @@ vidcap_decklink_probe(void)
 {
 
 	struct vidcap_type*		vt;
-	IDeckLinkIterator*		deckLinkIterator;
-	IDeckLink*			deckLink;
-	IDeckLinkDisplayModeIterator*	displayModeIterator = NULL;
-	IDeckLinkInput*		  	deckLinkInput = NULL;
-	IDeckLinkDisplayMode*		displayMode = NULL;
-	HRESULT				result;
-	int				numDevices = 0;
-	
-	unsigned int hd_size_x;
-	unsigned int hd_size_y;
-
-	/* CHECK IF THERE IS ANY BLACKMAGIC DEVICE */
-
-	// Create an IDeckLinkIterator object to enumerate all DeckLink cards in the system
-	deckLinkIterator = CreateDeckLinkIteratorInstance();
-	if (deckLinkIterator == NULL)
-	{
-		printf("A DeckLink iterator could not be created.  The DeckLink drivers may not be installed.\n");
-		return NULL;
-	}
-	
-	int dnum = 0;
-	
-	// Enumerate all cards in this system to find if there is any
-	while (deckLinkIterator->Next(&deckLink) == S_OK)
-	{
-		if (device != dnum) {
-			dnum++;
-
-			// Release the IDeckLink instance when we've finished with it to prevent leaks
-			deckLink->Release();
-			deckLink = NULL;
-			continue;	
-		}
-		dnum++;
-		
-		result = deckLink->QueryInterface(IID_IDeckLinkInput, (void**)&deckLinkInput);
-	  	if (result != S_OK)
-    		{
-			printf("Could not obtain the IDeckLinkInput interface - result = %08x\n", result);
-			return NULL;
-		}
-
-		result = deckLinkInput->GetDisplayModeIterator(&displayModeIterator);
-		if (result != S_OK)
-		{
-			printf("Could not obtain the video input display mode iterator - result = %08x\n", result);
-			return NULL;
-    		}
-
-		int mnum = 0;
-		while (displayModeIterator->Next(&displayMode) == S_OK)
-		{
-			if (mode != mnum) {
-				mnum++;
-				// Release the IDeckLinkDisplayMode object to prevent a leak
-				displayMode->Release();
-				continue;
-			}
-			mnum++;   
-                
-			// Obtain the display mode's properties
-			hd_size_x = displayMode->GetWidth();
-			hd_size_y = displayMode->GetHeight();
-		}
-		
-		// Release the IDeckLink instance when we've finished with it to prevent leaks
-		deckLink->Release();
-	}
-	
-	// the number of DeckLink devices
-	numDevices = dnum;
-	
-	// If no DeckLink cards were found in the system, inform the user
-	if (numDevices == 0){
-		printf("No Blackmagic Design devices were found.\n");
-		printf("Cannot probe Blackmagic capture device\n");
-		return NULL;
-	}
-
-	/* END OF CHECK IF THERE IS ANY BLACKMAGIC DEVICE */
 
 	vt = (struct vidcap_type *) malloc(sizeof(struct vidcap_type));
 	if (vt != NULL) {
 		vt->id          = VIDCAP_DECKLINK_ID;
 		vt->name        = "decklink";
 		vt->description = "Blackmagic DeckLink card";
-		vt->width       = hd_size_x;
-		vt->height      = hd_size_y;
-		vt->colour_mode = YUV_422;
 	}
 	return vt;
 }
@@ -309,9 +353,6 @@ vidcap_decklink_probe(void)
 void *
 vidcap_decklink_init(char *fmt)
 {
-	int fps; //FIXME What is it good for?
-	fps = atoi(fmt);
-
 	debug_msg("vidcap_decklink_init\n"); /* TOREMOVE */
 
 	struct vidcap_decklink_state *s;
@@ -327,15 +368,18 @@ vidcap_decklink_init(char *fmt)
 	IDeckLinkDisplayMode*		displayMode = NULL;
 	IDeckLinkConfiguration*		deckLinkConfiguration = NULL;
 
-	s = (struct vidcap_decklink_state *) malloc(sizeof(struct vidcap_decklink_state));
+	s = (struct vidcap_decklink_state *) calloc(1, sizeof(struct vidcap_decklink_state));
 	if (s == NULL) {
 		//printf("Unable to allocate DeckLink state\n",fps);
 		printf("Unable to allocate DeckLink state\n");
 		return NULL;
 	}
 
-	s->deckLink = NULL;
-	s->deckLinkInput = NULL;
+	// SET UP device and mode
+	if(settings_init(s, fmt) == 0) {
+		free(s);
+		return NULL;
+	}
 
 	// Create an IDeckLinkIterator object to enumerate all DeckLink cards in the system
 	deckLinkIterator = CreateDeckLinkIteratorInstance();
@@ -347,10 +391,11 @@ vidcap_decklink_init(char *fmt)
 
 	dnum = 0;
 	deckLink = NULL;
+	bool device_found = false;
     
 	while (deckLinkIterator->Next(&deckLink) == S_OK)
 	{
-		if (device != dnum) {
+		if (s->device != dnum) {
 			dnum++;
 
 			// Release the IDeckLink instance when we've finished with it to prevent leaks
@@ -358,6 +403,8 @@ vidcap_decklink_init(char *fmt)
 			deckLink = NULL;
 			continue;	
 		}
+
+		device_found = true;
 		dnum++;
 
 		s->deckLink = deckLink;
@@ -389,38 +436,57 @@ vidcap_decklink_init(char *fmt)
 			}
 
 			mnum = 0;
+			bool mode_found = false;
+
 			while (displayModeIterator->Next(&displayMode) == S_OK)
 			{
-				if (mode != mnum) {
+				if (s->mode != mnum) {
 					mnum++;
 					// Release the IDeckLinkDisplayMode object to prevent a leak
 					displayMode->Release();
 					continue;
 				}
+
+				mode_found = true;
 				mnum++; 
 
-				printf("The desired display mode is supported: %d\n",mode);  
+				printf("The desired display mode is supported: %d\n",s->mode);  
                 
 				const char *displayModeString = NULL;
 
 				result = displayMode->GetName(&displayModeString);
 				if (result == S_OK)
 				{
-					BMDPixelFormat pf = bmdFormat8BitYUV;
-
+					BMDPixelFormat pf;
+					switch(s->c_info->codec) {
+                                          case RGBA:
+						pf = bmdFormat8BitBGRA;
+						break;
+					  case Vuy2:
+						pf = bmdFormat8BitYUV;
+                                                break;
+					  case R10k:
+						pf = bmdFormat10BitRGB;
+						break;
+					  case v210:
+						pf = bmdFormat10BitYUV;
+						break;
+					  default:
+						printf("Unsupported codec! %s\n", s->c_info->name);
+					}
 					// get avarage time between frames
 					BMDTimeValue	frameRateDuration;
 					BMDTimeScale	frameRateScale;
 					double				fps;
 
 					// Obtain the display mode's properties
-					s->hd_size_x = displayMode->GetWidth();
-					s->hd_size_y = displayMode->GetHeight();
+					s->frame.width = displayMode->GetWidth();
+					s->frame.height = displayMode->GetHeight();
 
 					displayMode->GetFrameRate(&frameRateDuration, &frameRateScale);
-					fps = (double)frameRateScale / (double)frameRateDuration;
-					s->next_frame_time = (int) (1000000 / fps); // in microseconds
-					debug_msg("%-20s \t %d x %d \t %g FPS \t %d AVAREGE TIME BETWEEN FRAMES\n", displayModeString, s->hd_size_x, s->hd_size_y, fps, s->next_frame_time); /* TOREMOVE */  
+					s->frame.fps = (double)frameRateScale / (double)frameRateDuration;
+					s->next_frame_time = (int) (1000000 / s->frame.fps); // in microseconds
+					debug_msg("%-20s \t %d x %d \t %g FPS \t %d AVAREGE TIME BETWEEN FRAMES\n", displayModeString, s->frame.width, s->frame.height, s->frame.fps, s->next_frame_time); /* TOREMOVE */  
 
 					deckLinkInput->StopStreams();
 
@@ -495,6 +561,13 @@ vidcap_decklink_init(char *fmt)
 				displayMode = NULL;
 			}
 
+			// check if any mode was found
+			if (mode_found == false)
+			{
+				printf("Mode %d wasn't found.\n", s->mode);
+						goto error;
+			}
+
 			if (displayModeIterator != NULL){
 				displayModeIterator->Release();
 				displayModeIterator = NULL;
@@ -502,15 +575,27 @@ vidcap_decklink_init(char *fmt)
 		}
 	}
 
+	// check if any mode was found
+	if (device_found == false)
+	{
+		printf("Device %d wasn't found.\n", s->device);
+		goto error;
+	}
+
 	// init mutex
 	pthread_mutex_init(&(s->lock), NULL);
 	pthread_cond_init(&(s->boss_cv), NULL);
 	
-	s->boss_waiting = FALSE;
+	s->boss_waiting = FALSE;        	
 
-	// setup rtp_buffer
-	s->buffer_size = s->hd_size_x * s->hd_size_y * init_hd_color_bpp;
-	// s->rtp_buffer = malloc(s->buffer_size);
+	if(s->c_info->h_align) {
+           s->frame.src_linesize = ((s->frame.width + s->c_info->h_align - 1) / s->c_info->h_align) * 
+                s->c_info->h_align;
+        } else {
+             s->frame.src_linesize = s->frame.width;
+        }
+        s->frame.src_linesize *= s->c_info->bpp;
+        s->frame.data_len = s->frame.src_linesize * s->frame.height;
 
 	printf("DeckLink capture device enabled\n");
 
@@ -647,46 +732,85 @@ vidcap_decklink_grab(void *state)
 		}
 	}
 
-	/* if timeout != 0 then send clear frame */
-	if(!should_exit)
-	if(!timeout){
-		debug_msg("vidcap_decklink_grab - memcpy START\n");
-		//memcpy(s->rtp_buffer,s->delegate->pixelFrame,s->buffer_size);
-		debug_msg("vidcap_decklink_grab - memcpy END\n");
-	}else{
-		// clear s->rtp_buffer
-		debug_msg("vidcap_decklink_grab - memset START\n");
-		// memset(s->rtp_buffer, 0, s->buffer_size);
-		debug_msg("vidcap_decklink_grab - memset END\n");
-	}
 	s->delegate->newFrameReady = 0;
 
 // UNLOCK - UNLOCK - UNLOCK - UNLOCK - UNLOCK - UNLOCK - UNLOCK - UNLOCK - UN //
 	pthread_mutex_unlock(&(s->lock));
 
 	if (s->delegate->pixelFrame != NULL) {
-		vf = (struct video_frame *) malloc(sizeof(struct video_frame));
-		if (vf != NULL) {
-			vf->colour_mode	= YUV_422;
-			vf->width				= s->hd_size_x;
-			vf->height			= s->hd_size_y;
-			vf->data				= (char*) s->delegate->pixelFrame;
-			vf->data_len		= s->buffer_size;
-		}
-
-		// testing write of frames into the files
-		/*
-		char gn[128];
-		memset(gn, 0, 128);
-		sprintf(gn, "_frames/frame%04d.yuv", s->delegate->get_framecount());
-		FILE *g=fopen(gn, "w+");
-		fwrite(vf->data, 1, vf->data_len, g);
-		fclose(g);
-		*/
-
-		return vf;
+                s->frame.data = (char*)s->delegate->pixelFrame;
+                if(s->c_info->codec == RGBA) {
+                    vc_copylineRGBA((unsigned char*)s->frame.data, (unsigned char*)s->frame.data, s->frame.data_len, 16, 8, 0);
+                }
+                return &s->frame;
 	}
 	return NULL;
+}
+
+/* function from DeckLink SDK sample DeviceList */
+
+void
+print_output_modes (IDeckLink* deckLink)
+{
+	IDeckLinkOutput*			deckLinkOutput = NULL;
+	IDeckLinkDisplayModeIterator*		displayModeIterator = NULL;
+	IDeckLinkDisplayMode*			displayMode = NULL;
+	HRESULT					result;	
+	int 					displayModeNumber = 0;
+	
+	// Query the DeckLink for its configuration interface
+	result = deckLink->QueryInterface(IID_IDeckLinkOutput, (void**)&deckLinkOutput);
+	if (result != S_OK)
+	{
+		fprintf(stderr, "Could not obtain the IDeckLinkOutput interface - result = %08x\n", result);
+		goto bail;
+	}
+	
+	// Obtain an IDeckLinkDisplayModeIterator to enumerate the display modes supported on output
+	result = deckLinkOutput->GetDisplayModeIterator(&displayModeIterator);
+	if (result != S_OK)
+	{
+		fprintf(stderr, "Could not obtain the video output display mode iterator - result = %08x\n", result);
+		goto bail;
+	}
+	
+	// List all supported output display modes
+	printf("display modes:\n");
+	while (displayModeIterator->Next(&displayMode) == S_OK)
+	{
+		char *			displayModeString = NULL;
+		
+		result = displayMode->GetName((const char **) &displayModeString);
+		if (result == S_OK)
+		{
+			char			modeName[64];
+			int				modeWidth;
+			int				modeHeight;
+			BMDTimeValue	frameRateDuration;
+			BMDTimeScale	frameRateScale;
+			
+			
+			// Obtain the display mode's properties
+			modeWidth = displayMode->GetWidth();
+			modeHeight = displayMode->GetHeight();
+			displayMode->GetFrameRate(&frameRateDuration, &frameRateScale);
+			printf("%d.) %-20s \t %d x %d \t %g FPS\n",displayModeNumber, displayModeString, modeWidth, modeHeight, (double)frameRateScale / (double)frameRateDuration);
+			free(displayModeString);
+		}
+		
+		// Release the IDeckLinkDisplayMode object to prevent a leak
+		displayMode->Release();
+
+		displayModeNumber++;
+	}
+	
+bail:
+	// Ensure that the interfaces we obtained are released to prevent a memory leak
+	if (displayModeIterator != NULL)
+		displayModeIterator->Release();
+	
+	if (deckLinkOutput != NULL)
+		deckLinkOutput->Release();
 }
 
 #endif /* HAVE_DECKLINK */
