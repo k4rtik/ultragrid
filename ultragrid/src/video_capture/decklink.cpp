@@ -281,6 +281,7 @@ settings_init(void *state, char *fmt)
 {
 	struct vidcap_decklink_state *s = (struct vidcap_decklink_state *) state;
 
+
 	if(strcmp(fmt, "help")==0) {
 		decklink_help();
 		return 0;
@@ -550,6 +551,12 @@ vidcap_decklink_init(char *fmt)
 					{
 						printf("Could not start stream: %08x\n", result);
 						goto error;
+					}
+					if(displayMode->GetFieldDominance() == bmdUnknownFieldDominance ||
+						displayMode->GetFieldDominance() == bmdLowerFieldFirst ||
+						displayMode->GetFieldDominance() == bmdUpperFieldFirst)
+					{
+						s->frame.aux |= AUX_INTERLACED;
 					}
 
 				}else{
