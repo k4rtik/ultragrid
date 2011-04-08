@@ -435,22 +435,27 @@ static void *display_thread_gl(void *arg)
         /* Load shader */
         //TODO: Need a less breaky way to do this...
         struct stat file;
-        char *filename = strdup("../src/video_display/gl_sdl.glsl");
-        if ((stat(filename, &file)) == -1) {
-                filename = strdup("/usr/share/uv-0.3.1/gl_sdl.glsl");
-                if ((stat(filename, &file)) == -1) {
-                        filename =
-                            strdup("/usr/local/share/uv-0.3.1/gl_sdl.glsl");
-                        if ((stat(filename, &file)) == -1) {
-                                fprintf(stderr,
-                                        "gl_sdl.glsl not found. Giving up!\n");
-                                exit(113);
-                        }
-                }
+	char **filename;
+	char *filenames[] = {"../src/video_display/gl_sdl.glsl",
+		"/usr/share/uv-0.3.1/gl_sdl.glsl",
+		"/usr/local/share/uv-0.3.1/gl_sdl.glsl",
+		"/usr/local/share/uv-0.3.1/gl_sdl.glsl",
+		"share/gl_sdl.glsl",
+		NULL};
+	for(filename = filenames; *filename != NULL; ++filename)
+	{
+		if ((stat(*filename, &file)) != -1)
+			break;
+	}
+
+	if (*filename == NULL) {
+		fprintf(stderr,
+			"gl_sdl.glsl not found. Giving up!\n");
+		exit(113);
         }
         s->FProgram = calloc(file.st_size + 1, sizeof(char));
         FILE *fh;
-        fh = fopen(filename, "r");
+        fh = fopen(*filename, "r");
         if (!fh) {
                 perror(filename);
                 exit(113);
