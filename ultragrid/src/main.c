@@ -762,6 +762,10 @@ int main(int argc, char *argv[])
         if (sched_setscheduler(0, SCHED_FIFO, &sp) != 0) {
                 printf("WARNING: Unable to set real-time scheduling\n");
         }
+#if (HAVE_32B_LINUX || HAVE_64B_LINUX)
+	printf("Only processes with CAP_SYS_NICE capability can set the scheduling.\n");
+	printf("You may want to run \"setcap cap_sys_nice+ep %s\" (as root).\n", argv[-optind]);
+#endif
 #else
         printf("WARNING: System does not support real-time scheduling\n");
 #endif                          /* HAVE_SCHED_SETSCHEDULER */
