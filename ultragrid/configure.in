@@ -102,6 +102,7 @@ AC_SEARCH_LIBS(socket, socket)
 AC_SEARCH_LIBS(inet_addr, nsl)
 
 AC_CHECK_LIB(rt, main, LIBS="$LIBS -lrt", LIBS="$LIBS")
+AC_CHECK_LIB(dl, dlopen, LIBS="$LIBS -ldl", LIBS="$LIBS")
 
 AC_CHECK_FUNC(sin, MATHLIBS="", MATHLIBS="-lm")
 AC_CHECK_LIB(ieee, main, [MATHLIBS="-lieee $MATHLIBS"])

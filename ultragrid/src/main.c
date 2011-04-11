@@ -133,7 +133,7 @@ static void usage(void)
 {
         /* TODO -c -p -b are deprecated options */
         printf
-            ("Usage: uv [-d <display_device>] [-t <capture_device>] [-g <cfg>] [-m <mtu>] [-f <framerate>] [-c] [-p] [-i] [-b <8|10>] address(es)\n\n");
+            ("Usage: uv [-d <display_device>] [-t <capture_device>] [-g <cfg>] [-m <mtu>] [-f <framerate>] [-l <limit_bitrate>] [-c] [-p] [-i] [-b <8|10>] address(es)\n\n");
         printf
             ("\t-d <display_device>\tselect display device, use -d help to get\n");
         printf("\t                   \tlist of devices availabe\n");
@@ -145,6 +145,8 @@ static void usage(void)
             ("\t                   \tuse -g help with a device to get info about\n");
         printf("\t                   \tsupported capture/display modes\n");
         printf("\t-i                 \tiHDTV compatibility mode\n");
+        printf("\t-l <limit_bitrate> \tlimit sending bitrate (aggregate)\n");
+        printf("\t                   \tto limit_bitrate Mb/s\n");
         printf("\taddresses          \tcomma-separated list of destination interfaces'\n");
         printf("\t                   \taddresses (multilink, to same machine, only RTP)\n");
 }
@@ -561,6 +563,7 @@ int main(int argc, char *argv[])
         char *cfg = NULL;
         struct state_uv *uv;
         int ch;
+	int bitrate = 0;
         pthread_t receiver_thread_id, sender_thread_id;
 
         static struct option getopt_options[] = {
@@ -570,6 +573,7 @@ int main(int argc, char *argv[])
                 {"mtu", required_argument, 0, 'm'},
                 {"fps", required_argument, 0, 'f'},
                 {"bitdepth", required_argument, 0, 'b'},
+                {"limit-bitrate", required_argument, 0, 'l'},
                 {"version", no_argument, 0, 'v'},
                 {"compress", no_argument, 0, 'c'},
                 {"progressive", no_argument, 0, 'p'},
@@ -669,6 +673,13 @@ int main(int argc, char *argv[])
                         uv->audio_capture_device = atoi(optarg);
                         break;
 #endif                          /* HAVE_AUDIO */
+		case 'l':
+                        bitrate = atoi(optarg);
+			if(bitrate <= 0) {
+				usage();
+				return EXIT_FAIL_USAGE;
+			}
+			break;
 		case 'h':
 			usage();
 			return 0;
@@ -862,10 +873,13 @@ int main(int argc, char *argv[])
                         return EXIT_FAIL_NETWORK;
                 }
 
-                if (uv->requested_mtu == 0)     // mtu wasn't specified on the command line
-                {
+                if (uv->requested_mtu == 0) {    // mtu wasn't specified on the command line
                         uv->requested_mtu = 1500;       // the default value for rpt
                 }
+
+		if(bitrate != 0) { // else packet_rate defaults to 13600 or so
+			packet_rate = 1000 * uv->requested_mtu * 8 / bitrate;
+		}
 
                 if ((uv->tx = initialize_transmit(uv->requested_mtu)) == NULL) {
                         printf("Unable to initialize transmitter\n");
