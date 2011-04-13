@@ -604,11 +604,11 @@ int main(int argc, char *argv[])
 
 #ifdef HAVE_AUDIO
         while ((ch =
-                getopt_long(argc, argv, "d:g:t:m:f:b:r:s:vcpih", getopt_options,
+                getopt_long(argc, argv, "d:g:t:m:f:b:r:s:vcpil:h", getopt_options,
                             &option_index)) != -1) {
 #else
         while ((ch =
-                getopt_long(argc, argv, "d:g:t:m:f:b:vcpih", getopt_options,
+                getopt_long(argc, argv, "d:g:t:m:f:b:vcpil:h", getopt_options,
                             &option_index)) != -1) {
 #endif                          /* HAVE_AUDIO */
                 switch (ch) {
