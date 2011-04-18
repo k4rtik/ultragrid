@@ -2305,7 +2305,13 @@ int rtp_send_data(struct rtp *session, uint32_t rtp_ts, char pt, int m,
                   char *data, int data_len, 
 		  char *extn, uint16_t extn_len, uint16_t extn_type)
 {
-	return rtp_send_data_hdr(session, rtp_ts, pt, m, cc, csrc, NULL, 0, data, data_len, extn, extn_len, extn_type);
+    /*FIXME Last 2 parameters should be uint32_t random_offset,struct timeval  start_time
+    *       We haven't been using audio in more then 1 video thread yet.i
+    *       The curr_time is not correct for audio. Create tx structure for audio. 
+    */
+    struct timeval          curr_time;
+    gettimeofday(&curr_time, NULL);
+	return rtp_send_data_hdr(session, rtp_ts, pt, m, cc, csrc, NULL, 0, data, data_len, extn, extn_len, extn_type,0,curr_time);
 }
 
 int 
@@ -2314,7 +2320,8 @@ rtp_send_data_hdr(struct rtp *session,
                   int cc, uint32_t csrc[], 
                   char *phdr, int phdr_len, 
                   char *data, int data_len, 
-                  char *extn, uint16_t extn_len, uint16_t extn_type)
+                  char *extn, uint16_t extn_len, uint16_t extn_type,
+                  uint32_t random_offset,struct timeval  start_time)
 {
 	int			 vlen, buffer_len, i, rc, pad, pad_len;
 	uint8_t			*buffer = NULL;
@@ -2322,6 +2329,7 @@ rtp_send_data_hdr(struct rtp *session,
 	uint8_t 		 initVec[8] = {0,0,0,0,0,0,0,0};
 	struct iovec		 send_vector[3];
 	int			 send_vector_len;
+
 
 	check_database(session);
 
@@ -2338,7 +2346,6 @@ rtp_send_data_hdr(struct rtp *session,
 	if (extn != NULL) {
 		buffer_len += (extn_len + 1) * 4;
 	}
-
 	/* Do we need to pad this packet to a multiple of 64 bits? */
 	/* This is only needed if encryption is enabled, since DES */
 	/* only works on multiples of 64 bits. We just calculate   */
@@ -2367,7 +2374,8 @@ rtp_send_data_hdr(struct rtp *session,
 		buffer = (uint8_t *) malloc(20 + RTP_PACKET_HEADER_SIZE);
 		packet = (rtp_packet *) buffer;
 	}
-	send_vector[0].iov_base = buffer + RTP_PACKET_HEADER_SIZE;
+	
+    send_vector[0].iov_base = buffer + RTP_PACKET_HEADER_SIZE;
 	send_vector[0].iov_len  = buffer_len;
 	send_vector_len = 1;
 
@@ -2380,8 +2388,9 @@ rtp_send_data_hdr(struct rtp *session,
 		packet->data += (extn_len + 1) * 4;
 	}
 #endif
-	/* ...and the actual packet header... */
-	packet->v    = 2;
+	
+    /* ...and the actual packet header... */
+    packet->v    = 2;
 	packet->p    = pad;
 	packet->x    = (extn != NULL);
 	packet->cc   = cc;
@@ -2393,7 +2402,13 @@ rtp_send_data_hdr(struct rtp *session,
 
 	/* ... do tfrc stuff... */
 	if (session->tfrc_on) {
-		packet->send_ts = htonl(get_local_mediatime());
+
+        struct timeval          curr_time;
+        gettimeofday(&curr_time, NULL);
+        uint32_t tmp;
+        tmp=(tv_diff(curr_time, start_time) * 90000) + (random_offset);
+
+		packet->send_ts = htonl(tmp);
 		if (session->new_rtt) { 
 			packet->rtt = htonl(session->cmp_rtt);
 			/* hopefully this will set the 7th bit */
@@ -2458,7 +2473,8 @@ rtp_send_data_hdr(struct rtp *session,
 	gettimeofday(&session->last_rtp_send_time, NULL);
 
 	check_database(session);
-	return rc;
+	
+    return rc;
 }
 
 static int format_report_blocks(rtcp_rr *rrp, int remaining_length, struct rtp *session)

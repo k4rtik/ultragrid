@@ -87,15 +87,15 @@
 
 
 struct state_uv {
-	struct rtp		*network_device;
+    struct rtp		*network_device;
 	struct rtp		*audio_network_device;
 	struct vidcap		*capture_device;
 	struct timeval		 start_time, curr_time;
-	struct pdb		*participants;
+    struct pdb		*participants;
 	struct pdb		*audio_participants;
-	uint32_t		 ts;
+    uint32_t		 ts;
 	int			 fps;
-	struct video_tx		*tx;
+    struct video_tx		*tx;
 	struct display		*display_device;
 	struct video_compress	*compression;
 	const char		*requested_display;
@@ -110,7 +110,7 @@ struct state_uv {
 	int	audio_playback_device;
 };
 
-long            packet_rate = 13600;
+long        packet_rate = 13600;
 int	        should_exit = FALSE;
 uint32_t  	RTT = 0;    /* this is computed by handle_rr in rtp_callback */
 char		*frame_buffer = NULL;
@@ -265,8 +265,13 @@ initialize_network(char *addr, struct pdb *participants)
 	struct rtp 	*r;
 	double		 rtcp_bw = 5 * 1024 * 1024;	/* FIXME */
 	
-	r = rtp_init(addr, 5004, 5004, 255, rtcp_bw, FALSE, rtp_recv_callback, (void *) participants);
-	if (r != NULL) {
+	char *tmp;
+    tmp=strtok(addr,"/");
+    tmp=strtok(NULL,"/");
+    
+    r = rtp_init(addr, atoi(tmp), atoi(tmp), 255, rtcp_bw, FALSE, rtp_recv_callback, (void *) participants);
+	
+    if (r != NULL) {
 		pdb_add(participants, rtp_my_ssrc(r));
 		rtp_set_option(r, RTP_OPT_WEAK_VALIDATION,   TRUE);
 		rtp_set_sdes(r, rtp_my_ssrc(r), RTCP_SDES_TOOL, ULTRAGRID_VERSION, strlen(ULTRAGRID_VERSION));
@@ -388,7 +393,7 @@ audio_thread(void *arg)
 
 					while((cp != NULL) && (!audio_buffer_full(&buffer)))
 					{
-						audio_frame *frame = audio_buffer_get_empty_frame(&buffer);
+				    	audio_frame *frame = audio_buffer_get_empty_frame(&buffer);
 						if(audio_pbuf_decode(cp->playout_buffer, curr_time, frame))
 							audio_buffer_mark_last_frame_full(&buffer);
 						pbuf_remove(cp->playout_buffer, curr_time);
@@ -480,7 +485,7 @@ receiver_thread(void *arg)
 		}
 
 		timeout.tv_sec  = 0;
-		timeout.tv_usec = 999999 / 59.94;
+        timeout.tv_usec = 999999 / 59.94;
 		ret = rtp_recv(uv->network_device, &timeout, uv->ts);
 		
 		/*
@@ -532,7 +537,7 @@ sender_thread(void *arg)
 				dxt_tx_send(uv->tx, tx_frame, uv->network_device);
 #endif /* HAVE_FASTDXT */
 			}else{
-				tx_send(uv->tx, tx_frame, uv->network_device);
+                tx_send(uv->tx, tx_frame, uv->network_device);
 			}
 			free(tx_frame);
 		}
@@ -542,16 +547,35 @@ sender_thread(void *arg)
 }
 
 int 
+check_cfg(char* cfg)
+{
+    int  number=1;
+    char *tmp=cfg;
+    
+    tmp++;
+    while(tmp[0]==':')
+    {    
+        number++;
+        tmp+=2;
+    }
+    return number;
+}
+
+int 
 main(int argc, char *argv[])
 {
 
 #ifdef HAVE_SCHED_SETSCHEDULER
 	struct sched_param	 sp;
 #endif
-	char                    *cfg=NULL;
-	struct state_uv		*uv;
-	int			 ch;
-	pthread_t		 receiver_thread_id, sender_thread_id;
+	char                *cfg=NULL;
+	struct state_uv     *uv[4];
+    int			 ch;
+    int          i; 
+	int          number_of_devices;
+    int          res;
+    pthread_t	 receiver_thread_id;
+    pthread_t    sender_thread_id[4];
 
 	static struct option 	 getopt_options[] = {
 		{"display", required_argument, 0, 'd'},
@@ -570,23 +594,24 @@ main(int argc, char *argv[])
 	};
 	int			 option_index = 0;
 
-	//	uv = (struct state_uv *) calloc(1, sizeof(struct state_uv));
-	uv = (struct state_uv *) malloc(sizeof(struct state_uv));
+   for (i=0;i<4;i++)
+   {
+        uv[i] = (struct state_uv *) malloc(sizeof(struct state_uv));
 
-	uv->ts = 0;
-	uv->fps = 60;
-	uv->display_device = NULL;
-	uv->compression = NULL;
-	uv->requested_display = "none";
-	uv->requested_capture = "none";
-	uv->requested_compression = 0;
-	uv->requested_mtu = 0;
-	uv->use_ihdtv_protocol = 0;
-	uv->audio_capture_device = -2;	// no device
-	uv->audio_playback_device = -2;
-	uv->audio_participants = NULL;
-	uv->participants = NULL;
-
+        uv[i]->ts = 0;
+        uv[i]->fps = 60;
+        uv[i]->display_device = NULL;
+        uv[i]->compression = NULL;
+        uv[i]->requested_display = "none";
+        uv[i]->requested_capture = "none";
+        uv[i]->requested_compression = 0;
+        uv[i]->requested_mtu = 0;
+        uv[i]->use_ihdtv_protocol = 0;
+        uv[i]->audio_capture_device = -2;	// no device
+        uv[i]->audio_playback_device = -2;
+        uv[i]->audio_participants = NULL;
+        uv[i]->participants = NULL;
+   }
 #ifdef HAVE_AUDIO
 	while ((ch = getopt_long(argc, argv, "d:g:t:m:f:b:r:s:vcpi", getopt_options, &option_index)) != -1) {
 #else
@@ -594,29 +619,35 @@ main(int argc, char *argv[])
 #endif /* HAVE_AUDIO */
 		switch (ch) {
 		case 'd' :
-			uv->requested_display = optarg;
-            if(!strcmp(uv->requested_display, "help")) {
+            for(i=0;i<4;i++)
+			    uv[i]->requested_display = optarg;
+            if(!strcmp(uv[0]->requested_display, "help")) {
                 list_video_display_devices();
                 return 0;
             }
-			if(!strcmp(uv->requested_display,"dxt"))
-				uv->dxt_display = 1;
+			if(!strcmp(uv[0]->requested_display,"dxt")){
+                for(i=0;i<4;i++)
+                    uv[i]->dxt_display = 1;
+            }    
 			break;
 		case 't' :
-			uv->requested_capture = optarg;
-            if(!strcmp(uv->requested_capture, "help")) {
+            for(i=0;i<4;i++)
+			    uv[i]->requested_capture = optarg;
+            if(!strcmp(uv[0]->requested_capture, "help")) {
                 list_video_capture_devices();
                 return 0;
             }
 			break;
 		case 'm' :
-			uv->requested_mtu = atoi(optarg);
+            for(i=0;i<4;i++)
+                uv[i]->requested_mtu = atoi(optarg);
 			break;
 		case 'g' :
 			cfg = strdup(optarg);
 			break;
 		case 'f' :
-			uv->fps = atoi(optarg);
+            for(i=0;i<4;i++)
+                uv[i]->fps = atoi(optarg);
 			break;
 		case 'b' :
 			bitdepth = atoi(optarg);
@@ -635,13 +666,15 @@ main(int argc, char *argv[])
 			printf("%s\n", ULTRAGRID_VERSION);
 			return EXIT_SUCCESS;
 		case 'c' :
-			uv->requested_compression=1;
+            for(i=0;i<4;i++)
+			    uv[i]->requested_compression=1;
 			break;
 		case 'p' :
 			progressive=1;
 			break;
 		case 'i':
-			uv->use_ihdtv_protocol = 1;
+            for(i=0;i<4;i++)
+			    uv[i]->use_ihdtv_protocol = 1;
 			printf("setting ihdtv protocol\n");
 			break;
 #ifdef HAVE_AUDIO
@@ -650,14 +683,16 @@ main(int argc, char *argv[])
 				print_available_devices();
 				return EXIT_SUCCESS;
 			}
-			uv->audio_playback_device = atoi(optarg);
+            for(i=0;i<4;i++)
+                uv[i]->audio_playback_device = atoi(optarg);
 			break;
 		case 's':
 			if(!strcmp("list", optarg)){
 				print_available_devices();
 				return EXIT_SUCCESS;
 			}
-			uv->audio_capture_device = atoi(optarg);
+            for(i=0;i<4;i++)
+                uv[i]->audio_capture_device = atoi(optarg);
 			break;
 #endif /* HAVE_AUDIO */
 		case '?' :
@@ -669,13 +704,23 @@ main(int argc, char *argv[])
 	}
 
 	if(cfg == NULL) {
-                cfg=malloc(4);
-		snprintf(cfg, 4, "%d", uv->fps);
+        cfg=malloc(4);
+		snprintf(cfg, 4, "%d", uv[0]->fps);
 	}
-	argc -= optind;
-	argv += optind;
 
-	if(uv->use_ihdtv_protocol)
+    number_of_devices=1;
+
+#ifdef HAVE_QUAD    
+    number_of_devices=check_cfg(cfg);
+#endif  
+
+    for (i=3;i>=number_of_devices;i--)
+        free(uv[i]);
+
+    argc -= optind;
+	argv += optind;
+/*
+	if(uv[0]->use_ihdtv_protocol)
 	{
 		if((argc != 0) && (argc != 1) && (argc != 2))
 		{
@@ -683,46 +728,64 @@ main(int argc, char *argv[])
 			return EXIT_FAIL_USAGE;
 		}
 	}
-	else if (argc != 1 && strstr(cfg, "help")==0) {
+	else if (argc != number_of_devices  && strstr(cfg, "help")==0) {
 		usage();
 		return EXIT_FAIL_USAGE;
 	}
-
+*/
 	printf("%s\n", ULTRAGRID_VERSION);
-	printf("Display device: %s\n", uv->requested_display);
-	printf("Capture device: %s\n", uv->requested_capture);
-	printf("Frame rate    : %d\n", uv->fps);
-	printf("MTU           : %d\n", uv->requested_mtu);
-	if(uv->requested_compression)
+    printf("Display device: %s\n", uv[0]->requested_display);
+	printf("Capture device: %s\n", uv[0]->requested_capture);
+	printf("Frame rate    : %d\n", uv[0]->fps);
+	printf("MTU           : %d\n", uv[0]->requested_mtu);
+	if(uv[0]->requested_compression)
 		printf("Compression   : DXT\n");
 	else
 		printf("Compression   : None\n");
 
-	if(uv->use_ihdtv_protocol)
+	if(uv[0]->use_ihdtv_protocol)
 		printf("Network protocol: ihdtv\n");
 	else
 		printf("Network protocol: ultragrid rtp\n");
 
-	gettimeofday(&uv->start_time, NULL);
+    for(i=0;i<number_of_devices;i++)
+    	gettimeofday(&(uv[i]->start_time), NULL);
 
 	initialize_video_codecs();
-	uv->participants = pdb_init();
+	
+    for(i=0;i<number_of_devices;i++)
+        uv[i]->participants = pdb_init();
 
-	if ((uv->capture_device = initialize_video_capture(uv->requested_capture, cfg)) == NULL) {
-		printf("Unable to open capture device: %s\n", uv->requested_capture);
-		return EXIT_FAIL_CAPTURE;
-	}
-	printf("Video capture initialized-%s\n", uv->requested_capture);
+    
+    char *temp;
+    temp=NULL;
 
-	if ((uv->display_device = initialize_video_display(uv->requested_display, cfg)) == NULL) {
-		printf("Unable to open display device: %s\n", uv->requested_display);
+	if(temp == NULL) {
+        temp=malloc(4);
+	    memcpy(temp,cfg,strlen(cfg));
+    }
+
+    for (i=0;i<number_of_devices;i++)
+    {
+        if ((uv[i]->capture_device = initialize_video_capture(uv[i]->requested_capture, cfg)) == NULL) {
+            printf("Unable to open capture device: %s number %d\n", uv[i]->requested_capture, atoi(cfg));
+            return EXIT_FAIL_CAPTURE;
+        }
+	    printf("Video capture number %d initialized-%s\n", atoi(cfg), uv[i]->requested_capture);
+        //temp=strtok(NULL,":");
+        cfg+=2;
+    }
+
+	if ((uv[0]->display_device = initialize_video_display(uv[0]->requested_display, temp)) == NULL) {
+		printf("Unable to open display device: %s\n", uv[0]->requested_display);
 		return EXIT_FAIL_DISPLAY;
 	}
-	printf("Display initialized-%s\n", uv->requested_display);
+	printf("Display initialized-%s\n", uv[0]->requested_display);
 
 #ifdef HAVE_FASTDXT
-	if (uv->requested_compression) {
-		uv->compression = initialize_video_compression();
+	if (uv[0]->requested_compression) {
+        for(i=0;i<4;i++)
+            uv[i]->compression = initialize_video_compression();
 	}
 #endif /* HAVE_FASTDXT */
 
@@ -743,12 +806,14 @@ main(int argc, char *argv[])
 	printf("WARNING: System does not support real-time scheduling\n");
 #endif /* HAVE_SCHED_SETSCHEDULER */
 
+
+/*Edit HAVE_AUDIO to use more devices!!!*/    
 #ifdef HAVE_AUDIO
 	pthread_t audio_thread_id;
-	if( (uv->audio_playback_device != -2) || (uv->audio_capture_device != -2))
+	if( (uv[0]->audio_playback_device != -2) || (uv[0]->audio_capture_device != -2))
 	{
-		uv->audio_participants = pdb_init();
-		if(( uv->audio_network_device = initialize_audio_network(argv[0], uv->audio_participants)) == NULL)
+		uv[0]->audio_participants = pdb_init();
+		if(( uv[0]->audio_network_device = initialize_audio_network(argv[0], uv[0]->audio_participants)) == NULL)
 		{
 			printf("Unable to open audio network\n");
 			return EXIT_FAIL_NETWORK;
@@ -762,29 +827,30 @@ main(int argc, char *argv[])
 	}
 #endif /* HAVE_AUDIO */
 
-	if(uv->use_ihdtv_protocol) {
+    /*Edit ihdtv_protocol to use more devices!!!*/    
+	if(uv[0]->use_ihdtv_protocol) {
 		ihdtv_connection tx_connection, rx_connection;
 
 		printf("Initializing ihdtv protocol\n");
 
 		// we cannot act as both together, because parameter parsing whould have to be revamped
-		if ((strcmp("none", uv->requested_display) != 0) && (strcmp("none", uv->requested_capture) != 0))
+		if ((strcmp("none", uv[0]->requested_display) != 0) && (strcmp("none", uv[0]->requested_capture) != 0))
 		{
 			printf("Error: cannot act as both sender and reciever together in ihdtv mode\n");
 			return -1;
 		}
 
-		void *rx_connection_and_display[] = {(void*)&rx_connection, (void*)uv->display_device};
-		void *tx_connection_and_display[] = {(void*)&tx_connection, (void*)uv->capture_device};
+		void *rx_connection_and_display[] = {(void*)&rx_connection, (void*)uv[0]->display_device};
+		void *tx_connection_and_display[] = {(void*)&tx_connection, (void*)uv[0]->capture_device};
 
-		if(uv->requested_mtu == 0)  // mtu not specified on command line
+		if(uv[0]->requested_mtu == 0)  // mtu not specified on command line
 		{
-			uv->requested_mtu = 8112;   // not really a mtu, but a video-data payload per packet
+			uv[0]->requested_mtu = 8112;   // not really a mtu, but a video-data payload per packet
 		}
 
-		if (strcmp("none", uv->requested_display) != 0)
+		if (strcmp("none", uv[0]->requested_display) != 0)
 		{
-			if(ihdtv_init_rx_session(&rx_connection, (argc==0)?NULL:argv[0], (argc==0)?NULL:( (argc==1)?argv[0]:argv[1] ), 3000, 3001, uv->requested_mtu) != 0 )
+			if(ihdtv_init_rx_session(&rx_connection, (argc==0)?NULL:argv[0], (argc==0)?NULL:( (argc==1)?argv[0]:argv[1] ), 3000, 3001, uv[0]->requested_mtu) != 0 )
 			{
 				fprintf(stderr, "Error initializing reciever session\n");
 				return 1;
@@ -797,7 +863,7 @@ main(int argc, char *argv[])
 			}
 		}
 
-		if (strcmp("none", uv->requested_capture) != 0)
+		if (strcmp("none", uv[0]->requested_capture) != 0)
 		{
 			if(argc == 0)
 			{
@@ -806,13 +872,13 @@ main(int argc, char *argv[])
 				return EXIT_FAIL_USAGE;
 			}
 
-			if(ihdtv_init_tx_session(&tx_connection, argv[0], (argc==2)?argv[1]:argv[0], uv->requested_mtu) != 0)
+			if(ihdtv_init_tx_session(&tx_connection, argv[0], (argc==2)?argv[1]:argv[0], uv[0]->requested_mtu) != 0)
 			{
 				fprintf(stderr, "Error initializing sender session\n");
 				return 1;
 			}
 
-			if (pthread_create(&sender_thread_id, NULL, ihdtv_sender_thread, tx_connection_and_display) != 0)
+			if (pthread_create(&(sender_thread_id[0]), NULL, ihdtv_sender_thread, tx_connection_and_display) != 0)
 			{
 				fprintf(stderr, "Error creating sender thread. Quitting\n");
 				return 1;
@@ -824,39 +890,50 @@ main(int argc, char *argv[])
 
 	}
 	else {
-		if ((uv->network_device = initialize_network(argv[0], uv->participants)) == NULL) {
-			printf("Unable to open network\n");
-			return EXIT_FAIL_NETWORK;
+        for(i=0;i<number_of_devices;i++)
+        {
+            if ((uv[i]->network_device = initialize_network(argv[i], uv[i]->participants)) == NULL) {
+                printf("Unable to open network number %d\n",i);
+                return EXIT_FAIL_NETWORK;
+            }
 		}
-
-		if(uv->requested_mtu == 0)  // mtu wasn't specified on the command line
-		{
-			uv->requested_mtu = 1500;   // the default value for rpt
-		}
-
-		if ((uv->tx = initialize_transmit(uv->requested_mtu)) == NULL) {
-			printf("Unable to initialize transmitter\n");
+        
+        for(i=0;i<number_of_devices;i++)
+        {
+            if(uv[i]->requested_mtu == 0)  // mtu wasn't specified on the command line
+            {
+                uv[i]->requested_mtu = 1500;   // the default value for rpt
+            }
+        }
+        for(i=0;i<number_of_devices;i++)
+        {
+            if ((uv[i]->tx = initialize_transmit(uv[i]->requested_mtu)) == NULL) {
+			printf("Unable to initialize transmitter number %d\n",i);
 			return EXIT_FAIL_TRANSMIT;
-		}
+            }
+        }
 
-		if (strcmp("none", uv->requested_display) != 0) {
-			if(pthread_create(&receiver_thread_id, NULL, receiver_thread, (void *) uv) != 0) {
+		if (strcmp("none", uv[0]->requested_display) != 0) {
+			if(pthread_create(&receiver_thread_id, NULL, receiver_thread, (void *) uv[0]) != 0) {
 				perror("Unable to create display thread!\n");
 				should_exit = TRUE;
 			}
 		}
-		if (strcmp("none", uv->requested_capture) != 0) {
-			if(pthread_create(&sender_thread_id, NULL, sender_thread, (void *) uv) != 0) {
-				perror("Unable to create capture thread!\n");
-				should_exit = TRUE;
-			}
-		}
 
+        for(i=0;i<number_of_devices;i++)
+        {
+            if (strcmp("none", uv[i]->requested_capture) != 0) {
+                if(pthread_create(&(sender_thread_id[i]), NULL, sender_thread, (void *) uv[i]) != 0) {
+                    perror("Unable to create capture thread!\n");
+                    should_exit = TRUE;
+                }
+            }
+        }
 		while (!should_exit) {
 #ifndef X_DISPLAY_MISSING		
 #ifdef HAVE_SDL
-			if (strcmp(uv->requested_display, "sdl") == 0) {
-				display_sdl_handle_events(uv->display_device);
+			if (strcmp(uv[0]->requested_display, "sdl") == 0) {
+				display_sdl_handle_events(uv[0]->display_device);
 			}
 #endif /* HAVE_SDL */
 #endif /* X_DISPLAY_MISSING */
@@ -865,26 +942,34 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if(strcmp("none", uv->requested_display) != 0)
+	if(strcmp("none", uv[0]->requested_display) != 0)
 		pthread_join(receiver_thread_id, NULL);
 
-	if(strcmp("none", uv->requested_capture) != 0)
-		pthread_join(sender_thread_id, NULL);
+    for(i=0;i<number_of_devices;i++)
+    {
+        if(strcmp("none", uv[i]->requested_capture) != 0)
+	    	pthread_join(sender_thread_id[i], NULL);
+    }
 
 #ifdef HAVE_AUDIO
-	if((uv->audio_playback_device != -2) || (uv->audio_capture_device != -2))
+	if((uv[0]->audio_playback_device != -2) || (uv[0]->audio_capture_device != -2))
 		pthread_join(audio_thread_id, NULL);
 #endif /* HAVE_AUDIO */
 
-	tx_done(uv->tx);
-	rtp_done(uv->network_device);
-	vidcap_done(uv->capture_device);
-	display_done(uv->display_device);
+    display_done(uv[0]->display_device);
+    for(i=0;i<number_of_devices;i++)
+    {
+        tx_done(uv[i]->tx);
+        rtp_done(uv[i]->network_device);
+        vidcap_done(uv[i]->capture_device);
+        if(uv[i]->participants != NULL)
+            pdb_destroy(&(uv[i]->participants));
+        if(uv[i]->audio_participants != NULL)
+            pdb_destroy(&(uv[i]->audio_participants));
+        free(uv[i]);
+    }
 	vcodec_done();
-	if(uv->participants != NULL)
-		pdb_destroy(&uv->participants);
-	if(uv->audio_participants != NULL)
-		pdb_destroy(&uv->audio_participants);
-	printf("Exit\n");
+    free(temp);
+    printf("Exit\n");
 	return EXIT_SUCCESS;
 }

@@ -233,7 +233,7 @@ int 		 rtp_send_data_hdr(struct rtp *session,
 			       int cc, uint32_t csrc[], 
                                char *phdr, int phdr_len, 
                                char *data, int data_len, 
-			       char *extn, uint16_t extn_len, uint16_t extn_type);
+			       char *extn, uint16_t extn_len, uint16_t extn_type, uint32_t random_offset,struct timeval  start_time);
 void 		 rtp_send_ctrl(struct rtp *session, uint32_t rtp_ts, 
 			       rtcp_app_callback appcallback, struct timeval curr_time);
 void 		 rtp_update(struct rtp *session, struct timeval curr_time);

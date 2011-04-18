@@ -85,21 +85,21 @@ extern int	should_exit;
 
 static const char progname[] = "videocapture";
 const char fmt[] = "/sys/class/sdivideo/sdivideo%cx%i/%s";
-const char  device[] = "/dev/sdivideorx0";
 
 struct vidcap_quad_state {
     int                 fd;
+    char                device[17];
     struct              pollfd pfd;
 	unsigned char*		data;
+    unsigned long int 	bufsize;
 };
 
 int                 frames = 0;
 struct              timeval t, t0;
 
-unsigned long int 	bufsize;
 
 static void
-get_carrier (int fd)
+get_carrier (int fd, char *device)
 {
     int val;
 
@@ -117,7 +117,7 @@ get_carrier (int fd)
 
 
 static void
-get_video_standard (int fd)
+get_video_standard (int fd, char *device)
 {
 	unsigned int val;
 
@@ -215,36 +215,92 @@ vidcap_quad_probe(void)
 	printf("vidcap_quad_probe\n");
 
 	struct vidcap_type*		vt;
-	struct stat             buf;
-	char                    name[MAXLEN];
-    char                    data[MAXLEN];
-    char                    type;
-    char                    *endptr;
-	int                     num;
-    unsigned long int       mode;
-    unsigned long int       buffers;
     
 	/* CHECK IF QUAD CAN WORK CORRECTLY */
     
+    
+
+	/* END OF CHECK IF QUAD CAN WORK CORRECTLY */
+
+	vt = (struct vidcap_type *) malloc(sizeof(struct vidcap_type));
+	if (vt != NULL) {
+		vt->id          = VIDCAP_QUAD_ID;
+		vt->name        = "quad";
+		vt->description = "HD-SDI Maste Quad/i PCIe card";
+		vt->width       = hd_size_x;
+		vt->height      = hd_size_y;
+		vt->colour_mode = YUV_422;
+	}
+	return vt;
+}
+
+void *
+vidcap_quad_init(char *format)
+{
+	struct vidcap_quad_state *s;
+    struct stat               buf;
+	char                      name[MAXLEN];
+    char                      data[MAXLEN];
+    char                      type;
+    char                      *endptr;
+	int                       num;
+    unsigned long int         mode;
+    unsigned long int         buffers;
+    unsigned int              cap;
+    unsigned int              val;
+
+	printf("vidcap_quad_init\n");
+    
+
+    if(strcmp(format, "help") == 0)
+    {   
+        printf("set -g  device \n");
+        goto NO_STAT;
+    }   
+
+    //set device
+    char *tmp;
+    tmp = strtok(format, ":");
+    if(!tmp) 
+    {   
+        fprintf(stderr, "Wrong config %s\n", format);
+        goto NO_STAT;
+    }   
+    
+    if(atoi(tmp)>3 || atoi(tmp)<0)
+    {   
+        fprintf(stderr, "Wrong device number %s\n", format);
+        goto NO_STAT; 
+    }   
+   
+    s = (struct vidcap_quad_state *) malloc(sizeof(struct vidcap_quad_state));
+	if(s == NULL) {
+		printf("Unable to allocate Quad state\n");
+		return NULL;
+	}
+    memset(s->device,0,17);
+    strcat(s->device, "/dev/sdivideorx");
+    strcat(s->device, tmp);
+
     /*Printing current settings from the sysfs info */
 
     /* Stat the file, fills the structure with info about the file
     * Get the major number from device node
     */
 	memset (&buf, 0, sizeof (buf));
-    if(stat (device, &buf) < 0) {
-		fprintf (stderr, "%s: ", device);
+    if(stat (s->device, &buf) < 0) {
+		fprintf (stderr, "%s: ", s->device);
 		perror ("unable to get the file status");
 		goto NO_STAT;
 	}
 
     /* Check if it is a character device or not */
     if(!S_ISCHR (buf.st_mode)) {
-		fprintf (stderr, "%s: not a character device\n", device);
+		fprintf (stderr, "%s: not a character device\n", s->device);
 		goto NO_STAT;
 	}
 	if(!(buf.st_rdev & 0x0080)) {
-		fprintf (stderr, "%s: not a receiver\n", device);
+		fprintf (stderr, "%s: not a receiver\n", s->device);
 		goto NO_STAT;
 	}
 
@@ -260,25 +316,25 @@ vidcap_quad_probe(void)
     memset (data, 0,sizeof(data));
     /* Read sysfs file (dev) */
     if (util_read (name,data, sizeof (data)) < 0) {
-        fprintf (stderr, "%s: ", device);
+        fprintf (stderr, "%s: ", s->device);
         perror ("unable to get the device number");
 		goto NO_STAT;
     }
 
     /* Compare the major number taken from sysfs file to the one taken from device node */
     if (strtoul (data, &endptr, 0) != (buf.st_rdev >> 8)) {
-        fprintf (stderr, "%s: not a SMPTE 292M/SMPTE 259M-C device\n", device);
+        fprintf (stderr, "%s: not a SMPTE 292M/SMPTE 259M-C device\n", s->device);
 		goto NO_STAT;
     }
 
     if (*endptr != ':') {
-        fprintf (stderr, "%s: error reading %s\n", device, name);
+        fprintf (stderr, "%s: error reading %s\n", s->device, name);
 	    goto NO_STAT;
     }
 
     snprintf (name, sizeof (name),fmt, type, num, "mode");
     if (util_strtoul (name, &mode) < 0) {
-        fprintf (stderr, "%s: ", device);
+        fprintf (stderr, "%s: ", s->device);
         perror ("unable to get the pixel mode");
 	    goto NO_STAT;
     }
@@ -302,66 +358,35 @@ vidcap_quad_probe(void)
             break;
     }
 
+    
     snprintf (name, sizeof (name),fmt, type, num, "buffers");
     if (util_strtoul (name, &buffers) < 0) {
-        fprintf (stderr, "%s: ", device);
+        fprintf (stderr, "%s: ", s->device);
         perror ("unable to get the number of buffers");
 	    goto NO_STAT;
     }
 
     snprintf (name, sizeof (name),fmt, type, num, "bufsize");
-    if (util_strtoul (name, &(bufsize)) < 0) {
-        fprintf (stderr, "%s: ", device);
+    if (util_strtoul (name, &(s->bufsize)) < 0) {
+        fprintf (stderr, "%s: ", s->device);
         perror ("unable to get the buffer size");
 	    goto NO_STAT;
     }
-    printf ("\t%lux%lu-byte buffers\n", buffers, bufsize);
-    
-
-	/* END OF CHECK IF QUAD CAN WORK CORRECTLY */
-
-	vt = (struct vidcap_type *) malloc(sizeof(struct vidcap_type));
-	if (vt != NULL) {
-		vt->id          = VIDCAP_QUAD_ID;
-		vt->name        = "quad";
-		vt->description = "HD-SDI Maste Quad/i PCIe card";
-		vt->width       = hd_size_x;
-		vt->height      = hd_size_y;
-		vt->colour_mode = YUV_422;
-	}
-	return vt;
-
-NO_STAT:
-	return NULL;
-}
-
-void *
-vidcap_quad_init(void)
-{
-	struct vidcap_quad_state *s;
-
-    unsigned int       cap;
-    unsigned int       val;
-
-	printf("vidcap_quad_init\n");
-    
-    s = (struct vidcap_quad_state *) malloc(sizeof(struct vidcap_quad_state));
-	if(s == NULL) {
-		printf("Unable to allocate Quad state\n");
-		return NULL;
-	}
+    printf ("\t%lux%lu-byte buffers\n", buffers, s->bufsize);
 
     /* Open the file */
-	if((s->fd = open (device, O_RDONLY,0)) < 0) {
-		fprintf (stderr, "%s: ", device);
+	if((s->fd = open (s->device, O_RDONLY, 0)) < 0) {
+		fprintf (stderr, "%s: ", s->device);
 		perror ("unable to open file for reading");
 		goto NO_STAT;
 	}
     
-
+    //device needs some time to open
+    usleep(40000);
+    
     /* Get the receiver capabilities */
     if (ioctl (s->fd, SDIVIDEO_IOC_RXGETCAP, &cap) < 0) {
-        fprintf (stderr, "%s: ", device);
+        fprintf (stderr, "%s: ", s->device);
         perror ("unable to get the receiver capabilities");
         close (s->fd);
 		goto NO_STAT;
@@ -369,12 +394,12 @@ vidcap_quad_init(void)
 
     /*Get carrier*/
     if(cap & SDIVIDEO_CAP_RX_CD) {
-        get_carrier (s->fd);
+        get_carrier (s->fd,s->device);
     } 
 
     
     if(ioctl (s->fd, SDIVIDEO_IOC_RXGETSTATUS, &val) < 0) {
-                fprintf (stderr, "%s: ", device);
+                fprintf (stderr, "%s: ", s->device);
                 perror ("unable to get the receiver status");
         }else {
         fprintf (stderr, "\tReceiver is ");
@@ -388,11 +413,11 @@ vidcap_quad_init(void)
     }
 
     /*Get video standard*/
-    get_video_standard (s->fd);    
+    get_video_standard (s->fd, s->device);    
 	
     /* Allocate some memory */
-	if((s->data = (unsigned char *)malloc (bufsize)) == NULL) {
-		fprintf (stderr, "%s: ", device);
+	if((s->data = (unsigned char *)malloc (s->bufsize)) == NULL) {
+		fprintf (stderr, "%s: ", s->device);
 		fprintf (stderr, "unable to allocate memory\n");
 		goto NO_BUFS;
 	}
@@ -442,14 +467,14 @@ vidcap_quad_grab(void *state)
     /* Receive the data and check for errors */
 	
 	if(poll (&(s->pfd), 1, 1000) < 0) {
-		fprintf (stderr, "%s: ", device);
+		fprintf (stderr, "%s: ", s->device);
 		perror ("unable to poll device file");
 		goto NO_RUN;
 	}
 
 	if(s->pfd.revents & POLLIN) {
-		if ((read_ret = read (s->fd, s->data, bufsize)) < 0) {
-			fprintf (stderr, "%s: ", device);
+		if ((read_ret = read (s->fd, s->data, s->bufsize)) < 0) {
+			fprintf (stderr, "%s: ", s->device);
 			perror ("unable to read from device file");
 			goto NO_RUN;
 		}
@@ -459,7 +484,7 @@ vidcap_quad_grab(void *state)
 
 	if(s->pfd.revents & POLLPRI) {
 		if (ioctl (s->fd,SDIVIDEO_IOC_RXGETEVENTS, &val) < 0) {
-			fprintf (stderr, "%s: ", device);
+			fprintf (stderr, "%s: ", s->device);
 			perror ("unable to get receiver event flags");
 			goto NO_RUN;
 		}
@@ -497,7 +522,8 @@ vidcap_quad_grab(void *state)
 			vf->width	    = hd_size_x;
 			vf->height	    = hd_size_y;
 			vf->data	    = (char*) s->data;
-			vf->data_len	= bufsize;
+            vf->data_len	= hd_size_x*hd_size_y*hd_color_bpp;
+            //vf->data_len	= s->bufsize;
 		}
 
         frames++;

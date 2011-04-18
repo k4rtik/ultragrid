@@ -63,6 +63,7 @@
 #include "transmit.h"
 #include "host.h"
 #include "audio/audio.h"
+#include "crypto/random.h"
 
 #define TRANSMIT_MAGIC	0xe80ab15f
 #define DXT_HEIGHT 1080/4
@@ -81,21 +82,28 @@ extern long packet_rate;
 #define GET_DELTA delta = stop.tv_nsec - start.tv_nsec
 #endif /* HAVE_MACOSX */
 
+/*
+ *We added start_time, curr_time, random_offset and first to structure 
+ *because of not reentrant function get_local_mediatime().
+ */
 struct video_tx {
-	uint32_t	 magic;
-	unsigned	 mtu;
+    struct timeval       start_time, curr_time;
+    uint32_t             random_offset;
+	uint32_t	         magic;
+	unsigned	         mtu;
+    int                  first;
 };
 
 struct video_tx *
 tx_init(unsigned mtu)
 {
 	struct video_tx	*tx;
-
 	tx = (struct video_tx *) malloc(sizeof(struct video_tx));
 	if (tx != NULL) {
 		tx->magic = TRANSMIT_MAGIC;
 		tx->mtu   = mtu;
-	}
+        tx->first=0;
+    }
 	return tx;
 }
 
@@ -190,7 +198,7 @@ dxt_tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_sess
 			payload_hdr[payload_count - 1].flags = htons(1<<15);
 			data = frame->data + (first_y * DXT_WIDTH * DXT_DEPTH) + (first_x * DXT_DEPTH);
 			GET_STARTTIME;
-			rtp_send_data_hdr(rtp_session, ts, pt, m, 0, 0, (char *) payload_hdr, 8 * payload_count, data, data_len, 0, 0, 0);
+			rtp_send_data_hdr(rtp_session, ts, pt, m, 0, 0, (char *) payload_hdr, 8 * payload_count, data, data_len, 0, 0, 0,tx->random_offset, tx->start_time);
 			do {
 				GET_STOPTIME;
 				GET_DELTA;
@@ -208,9 +216,9 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
 	int		 m, x, y, first_x, first_y, data_len, l, payload_count, octets_left_this_line, octets_left_this_packet;
 	payload_hdr_t	 payload_hdr[10];
 	int		 pt = 96;	/* A dynamic payload type for the tests... */
-	static uint32_t	 ts = 0;
+    uint32_t	 ts = 0;
 	char		*data;
-
+   
 	assert(tx->magic == TRANSMIT_MAGIC);
 
 	assert(frame->data_len == (hd_size_x * hd_size_y * hd_color_bpp));
@@ -223,8 +231,19 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
 	data_len = 0;
 	first_x  = x;
 	first_y  = y;
-	ts = get_local_mediatime();
-	do {
+	
+    //ts = get_local_mediatime();
+   
+    if (tx->first == 0) {
+        gettimeofday(&(tx->start_time), NULL);
+        tx->random_offset = lbl_random();
+        tx->first = 1;
+    }   
+
+    gettimeofday(&(tx->curr_time), NULL);
+    ts=(tv_diff(tx->curr_time, tx->start_time) * 90000) + (tx->random_offset);
+   
+    do {
 		if (payload_count == 0) {
 			data_len = 0;
 			first_x  = x;
@@ -269,17 +288,18 @@ tx_send(struct video_tx *tx, struct video_frame *frame, struct rtp *rtp_session)
 			long delta;
 			payload_hdr[payload_count - 1].flags = htons(1<<15);
 			data = frame->data + (first_y * HD_WIDTH * HD_DEPTH) + (first_x * HD_DEPTH);
-			GET_STARTTIME;
-			rtp_send_data_hdr(rtp_session, ts, pt, m, 0, 0, (char *) payload_hdr, 8 * payload_count, data, data_len, 0, 0, 0);
-			do {
+			//GET_STARTTIME;
+            rtp_send_data_hdr(rtp_session, ts, pt, m, 0, 0, (char *) payload_hdr, 8 * payload_count, data, data_len, 0, 0, 0, tx->random_offset, tx->start_time);
+            /*			do {
 				GET_STOPTIME;
 				GET_DELTA;
 				if(delta < 0)
 					delta += 1000000000L;
-			} while(packet_rate - delta > 0);
+			} while(packet_rate - delta > 0);   */
 			payload_count = 0;
 		}
 	} while (y < (int)HD_HEIGHT);
+
 }
 
 #ifdef HAVE_AUDIO
