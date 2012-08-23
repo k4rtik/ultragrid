@@ -51,6 +51,7 @@
 #include "config_win32.h"
 #endif // HAVE_CONFIG_H
 
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include "video_codec.h"
@@ -60,6 +61,10 @@
 #include "video_compress/jpeg.h"
 #include "video_compress/none.h"
 #include "lib_common.h"
+
+
+pthread_once_t table_initialized = PTHREAD_ONCE_INIT;
+
 
 /* *_str are symbol names inside library */
 struct compress_t {
@@ -160,7 +165,7 @@ static void init_compressions(void)
 void show_compress_help()
 {
         int i;
-        init_compressions();
+        pthread_once(&table_initialized, init_compressions);
         printf("Possible compression modules (see '-c <module>:help' for options):\n");
         for(i = 0; i < compress_modules_count; ++i) {
                 printf("\t%s\n", available_compress_modules[i]->name);
@@ -181,7 +186,7 @@ struct compress_state *compress_init(char *config_string)
                 return NULL;
         }
 
-        init_compressions();
+        pthread_once(&table_initialized, init_compressions);
         
         s = (struct compress_state *) malloc(sizeof(struct compress_state));
         s->handle = NULL;

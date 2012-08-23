@@ -57,6 +57,7 @@
 #include "video_display.h"
 
 #include "video_display/aggregate.h"
+#include "video_display/gcoll.h"
 #include "video_display/null.h"
 #include "video_display/sdl.h"
 #include "video_display/decklink.h"
@@ -79,7 +80,7 @@ typedef struct {
         const  char              *library_name;
         display_type_t         *(*func_probe) (void);
         const char               *func_probe_str;
-        void                   *(*func_init) (char *fmt, unsigned int flags);
+        void                   *(*func_init) (char *fmt, unsigned int flags, void *udata);
         const char               *func_init_str;
         void                    (*func_run) (void *state);
         const char               *func_run_str;
@@ -123,6 +124,23 @@ static display_table_t display_device_table[] = {
          MK_STATIC(display_aggregate_get_audio_frame),
          MK_STATIC(display_aggregate_put_audio_frame),
          MK_STATIC(display_aggregate_reconfigure_audio),
+         NULL
+         },
+        {
+         0,
+         NULL,
+         MK_STATIC(display_gcoll_probe),
+         MK_STATIC(display_gcoll_init),
+         MK_STATIC(display_gcoll_run),
+         MK_STATIC(display_gcoll_done),
+         MK_STATIC(display_gcoll_finish),
+         MK_STATIC(NULL),
+         MK_STATIC(display_gcoll_putf),
+         MK_STATIC(NULL),
+         MK_STATIC(display_gcoll_get_property),
+         MK_STATIC(NULL),
+         MK_STATIC(NULL),
+         MK_STATIC(NULL),
          NULL
          },
 #if defined HAVE_SDL || defined BUILD_LIBRARIES
@@ -411,7 +429,7 @@ struct display {
         void *state;
 };
 
-struct display *display_init(display_id_t id, char *fmt, unsigned int flags)
+struct display *display_init(display_id_t id, char *fmt, unsigned int flags, void *udata)
 {
         unsigned int i;
 
@@ -420,7 +438,7 @@ struct display *display_init(display_id_t id, char *fmt, unsigned int flags)
                         struct display *d =
                             (struct display *)malloc(sizeof(struct display));
                         d->magic = DISPLAY_MAGIC;
-                        d->state = display_device_table[i].func_init(fmt, flags);
+                        d->state = display_device_table[i].func_init(fmt, flags, udata);
                         d->index = i;
                         if (d->state == NULL) {
                                 debug_msg("Unable to start display 0x%08lx\n",

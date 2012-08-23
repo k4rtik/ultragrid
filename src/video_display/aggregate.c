@@ -110,8 +110,9 @@ void display_aggregate_run(void *state)
         }
 }
 
-void *display_aggregate_init(char *fmt, unsigned int flags)
+void *display_aggregate_init(char *fmt, unsigned int flags, void *udata)
 {
+        UNUSED(udata);
         UNUSED(fmt);
         UNUSED(flags);
         struct display_aggregate_state *s;
@@ -156,7 +157,8 @@ void *display_aggregate_init(char *fmt, unsigned int flags)
                 }
 
                 s->devices[i] = initialize_video_display(device,
-                                               device_cfg, dev_flags);
+                                               device_cfg, dev_flags,
+                                               udata);
                 free(config);
                 if(!s->devices[i]) {
                         fprintf(stderr, "[aggregate] Unable to initialize device %d (%s:%s).\n", i, device, device_cfg);

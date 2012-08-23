@@ -53,7 +53,7 @@
 struct audio_frame;
 
 display_type_t          *display_gl_probe(void);
-void                    *display_gl_init(char *fmt, unsigned int flags);
+void                    *display_gl_init(char *fmt, unsigned int flags, void *udata);
 void                     display_gl_run(void *state);
 void                     display_gl_done(void *state);
 void                     display_gl_finish(void *state);

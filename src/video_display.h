@@ -106,9 +106,10 @@ struct display;
  *
  * @param fmt    command-line entered format string
  * @param flags  bit sum of DISPLAY_FLAG_* params defined above
+ * @param udata  additional data passed to display
  * @return       opaque struct which will be passed in subsequent calls
  */
-struct display	        *display_init(display_id_t id, char *fmt, unsigned int flags);
+struct display	        *display_init(display_id_t id, char *fmt, unsigned int flags, void *udata);
 
 /**
  * This call is entered in main thread and the display may stay in this call until end of the program.

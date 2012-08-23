@@ -47,6 +47,14 @@
 #ifndef __video_h
 
 #define __video_h
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#include "config_unix.h"
+#include "config_win32.h"
+#endif // HAVE_CONFIG_H
+
+
 #include "tile.h"
 
 typedef enum {
@@ -115,6 +123,8 @@ struct video_frame
         struct tile         *tiles;
         
         unsigned int         tile_count;
+
+        uint32_t             ssrc;
 };
 
 struct tile {

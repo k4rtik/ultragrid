@@ -553,7 +553,7 @@ static void show_help(int full)
         print_modes(full);
 }
 
-void *display_quicktime_init(char *fmt, unsigned int flags)
+void *display_quicktime_init(char *fmt, unsigned int flags, void *udata)
 {
         struct state_quicktime *s;
         int ret;

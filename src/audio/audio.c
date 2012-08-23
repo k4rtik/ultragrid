@@ -527,3 +527,8 @@ int audio_reconfigure(struct state_audio *s, int quant_samples, int channels,
                         channels, sample_rate);
 }
 
+uint32_t audio_net_get_ssrc(struct state_audio *state)
+{
+        return rtp_my_ssrc(state->audio_network_device);
+}
+

@@ -641,8 +641,9 @@ int display_dvs_reconfigure(void *state,
 }
 
 
-void *display_dvs_init(char *fmt, unsigned int flags)
+void *display_dvs_init(char *fmt, unsigned int flags, void *udata)
 {
+        UNUSED(udata);
         struct state_hdsp *s;
         int i;
         char *name = "";

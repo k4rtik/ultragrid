@@ -46,9 +46,12 @@
  *
  */
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#include "config_unix.h"
+#include "config_win32.h"
+#endif // HAVE_CONFIG_H
 
-#include <stdbool.h>
 
 #ifndef _AUDIO_H_
 #define _AUDIO_H_
@@ -105,5 +108,7 @@ void change_bps(char *out, int out_bps, const char *in, int in_bps, int in_len /
  * Makes n copies of first channel (interleaved).
  */
 void audio_frame_multiply_channel(struct audio_frame *frame, int new_channel_count);
+
+uint32_t audio_net_get_ssrc(struct state_audio *state);
 
 #endif

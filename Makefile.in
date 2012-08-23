@@ -90,6 +90,7 @@ OBJS	      = @OBJS@ \
 		src/video_decompress/null.o \
 		src/video_display.o \
 		src/video_display/aggregate.o \
+		src/video_display/gcoll.o \
 		src/video_display/null.o \
 		src/vo_postprocess.o \
 		src/vo_postprocess/3d-interlaced.o \

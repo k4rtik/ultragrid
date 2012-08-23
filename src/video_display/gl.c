@@ -285,8 +285,9 @@ static void gl_check_error()
 		abort();
 }
 
-void * display_gl_init(char *fmt, unsigned int flags) {
+void * display_gl_init(char *fmt, unsigned int flags, void *udata) {
         UNUSED(flags);
+        UNUSED(udata);
 	struct state_gl        *s;
 #ifdef HAVE_LINUX
         GLenum err;

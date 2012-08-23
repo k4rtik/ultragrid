@@ -142,7 +142,7 @@ void display_sage_run(void *arg)
         }
 }
 
-void *display_sage_init(char *fmt, unsigned int flags)
+void *display_sage_init(char *fmt, unsigned int flags, void *udata)
 {
         UNUSED(fmt);
         UNUSED(flags);

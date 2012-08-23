@@ -56,10 +56,11 @@ struct state_null {
         uint32_t magic;
 };
 
-void *display_null_init(char *fmt, unsigned int flags)
+void *display_null_init(char *fmt, unsigned int flags, void *udata)
 {
         UNUSED(fmt);
         UNUSED(flags);
+        UNUSED(udata);
         struct state_null *s;
 
         s = (struct state_null *)calloc(1, sizeof(struct state_null));

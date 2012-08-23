@@ -553,7 +553,7 @@ int display_sdl_reconfigure(void *state, struct video_desc desc)
         return TRUE;
 }
 
-void *display_sdl_init(char *fmt, unsigned int flags)
+void *display_sdl_init(char *fmt, unsigned int flags, void *udata)
 {
         struct state_sdl *s;
         int ret;

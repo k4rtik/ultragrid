@@ -1800,6 +1800,19 @@ AC_SUBST(GUI_TARGET)
 AC_SUBST(QMAKE)
 
 # -------------------------------------------------------------------------------------------------
+# GColl
+gcoll=yes
+AC_ARG_ENABLE(gcoll,
+    AS_HELP_STRING([--enable-gcoll], [enable GColl mode]),
+    [if test $enableval != no; then gcoll = yes; fi],
+    )
+
+if test $gcoll = yes; then
+        AC_DEFINE([GCOLL], [1], [Build GColl mode])
+fi
+
+
+# -------------------------------------------------------------------------------------------------
 # We need to add libraries then
 
 # this is only needed when passing to "clean" make target

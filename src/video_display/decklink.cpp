@@ -680,8 +680,9 @@ static int blackmagic_api_version_check(STRING *current_version)
 }
 
 
-void *display_decklink_init(char *fmt, unsigned int flags)
+void *display_decklink_init(char *fmt, unsigned int flags, void *udata)
 {
+        UNUSED(udata);
         struct state_decklink *s;
         IDeckLinkIterator*                              deckLinkIterator;
         HRESULT                                         result;

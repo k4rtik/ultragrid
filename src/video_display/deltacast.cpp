@@ -295,8 +295,9 @@ error:
 }
 
 
-void *display_deltacast_init(char *fmt, unsigned int flags)
+void *display_deltacast_init(char *fmt, unsigned int flags, void *udata)
 {
+        UNUSED(udata);
         struct state_deltacast *s;
         ULONG             Result,DllVersion,NbBoards,ChnType;
         ULONG             BrdId = 0;

@@ -570,6 +570,7 @@ static struct video_frame * reconfigure_decoder(struct state_decoder * const dec
                  */
                 //display_put_frame(decoder->display, frame);
                 /* reconfigure VO and give it opportunity to pass us pitch */        
+#if 0
                 ret = display_reconfigure(decoder->display, display_desc);
                 if(!ret) {
                         fprintf(stderr, "[decoder] Unable to reconfigure display.\n");
@@ -577,6 +578,7 @@ static struct video_frame * reconfigure_decoder(struct state_decoder * const dec
                         return NULL;
                 }
                 frame_display = display_get_frame(decoder->display);
+#endif
                 decoder->display_desc = display_desc;
         }
         /*if(decoder->postprocess) {
@@ -772,6 +774,11 @@ static int check_for_mode_change(struct state_decoder *decoder, uint32_t *hdr, s
                 pbuf_data->frame_buffer = *frame;
                 ret = TRUE;
         }
+
+        if(!pbuf_data->frame_buffer) {
+                *frame = pbuf_data->frame_buffer = vf_alloc_desc_data(decoder->display_desc);
+        }
+
         return ret;
 }
 

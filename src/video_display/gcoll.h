@@ -1,8 +1,8 @@
 /*
- * FILE:   video_display/decklink.h
- * AUTHOR: Colin Perkins <csp@isi.edu>
+ * FILE:   display_null.h
+ * AUTHOR: Colin Perkins <csp@csperkins.org>
  *
- * Copyright (c) 2001-2002 University of Southern California
+ * Copyright (c) 2001-2003 University of Southern California
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, is permitted provided that the following conditions
@@ -38,33 +38,49 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * $Revision: 1.1 $
+ * $Date: 2007/11/08 09:48:59 $
+ *
  */
-#include "video_display.h"
 
-#define DISPLAY_DECKLINK_ID	0x415f46d0
+#define DISPLAY_GCOLL_ID       0x16e271fb
+#include "video.h"
+#include "video_display.h" // display_type_t
+
+#define GCOLL_FRONT  0
+#define GCOLL_SIDE   1
+#define GCOLL_GROUP  2
+
+struct gcoll_init_params {
+        uint32_t front_ssrc;
+        uint32_t side_ssrc;
+
+        bool send_group_camera;
+        uint32_t group_ssrc;
+
+        bool send_audio;
+        uint32_t audio_ssrc;
+
+        uint32_t group_id;
+
+        const char *reflector_addr;
+};
+
 
 struct audio_frame;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+display_type_t		*display_gcoll_probe(void);
+/**
+ * @param udata          struct gcoll_init_params cast to (void *)
+ */
+void 			*display_gcoll_init(char *fmt, unsigned int flags, void *udata);
+void 			 display_gcoll_run(void *state);
+void 			 display_gcoll_finish(void *state);
+void 			 display_gcoll_done(void *state);
+/**
+ * Puts video frame to driver.
+ * Driver is responsible for freeing the video frame.
+ */
+int 			 display_gcoll_putf(void *state, struct video_frame *frame);
+int                      display_gcoll_get_property(void *state, int property, void *val, size_t *len);
 
-display_type_t      *display_decklink_probe(void);
-void                *display_decklink_init(char *fmt, unsigned int flags, void *udata);
-void                 display_decklink_run(void *state);
-void                 display_decklink_finish(void *state);
-void                 display_decklink_done(void *state);
-struct video_frame  *display_decklink_getf(void *state);
-int                  display_decklink_putf(void *state, struct video_frame *frame);
-int                  display_decklink_reconfigure(void *state,
-                                struct video_desc desc);
-int                  display_decklink_get_property(void *state, int property, void *val, size_t *len);
-
-struct audio_frame * display_decklink_get_audio_frame(void *state);
-void                 display_decklink_put_audio_frame(void *state, struct audio_frame *frame);
-int                  display_decklink_reconfigure_audio(void *state, int quant_samples, int channels,
-                int sample_rate);
-
-#ifdef __cplusplus
-} // END extern "C"
-#endif
