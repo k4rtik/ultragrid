@@ -1800,6 +1800,37 @@ AC_SUBST(GUI_TARGET)
 AC_SUBST(QMAKE)
 
 # -------------------------------------------------------------------------------------------------
+# V4L2
+# -------------------------------------------------------------------------------------------------
+v4l2=no
+AC_ARG_ENABLE(v4l2,
+      AS_HELP_STRING([--disable-v4l2], [disable V4L2 support(default is auto)]),
+    [v4l2_req=$enableval],
+    [v4l2_req=yes]
+    )
+
+PKG_CHECK_MODULES([V4L2], [libv4l2 libv4lconvert], [found_v4l2=yes], [found_v4l2=no])
+
+if test $v4l2_req = yes -a $found_v4l2 = yes
+then
+        V4L2_OBJ="src/video_capture/v4l2.o"
+        AC_DEFINE([HAVE_V4L2], [1], [Build with V4L2 support])
+        AC_SUBST(V4L2_LIB_TARGET, "lib/ultragrid/vidcap_v4l2.so.$video_capture_abi_version")
+        LIB_TARGETS="$LIB_TARGETS $V4L2_LIB_TARGET"
+        LIB_OBJS="$LIB_OBJS $V4L2_OBJ"
+        CFLAGS="$CFLAGS $V4L2_CFLAGS"
+        v4l2=yes
+else
+        V4L2_LIBS=
+        V4L2_OBJ=
+fi
+
+AC_SUBST(V4L2_LIBS) # set by pkg-config
+AC_SUBST(V4L2_OBJ)
+
+LIB_MODULES="$LIB_MODULES $V4L2_LIBS"
+
+# -------------------------------------------------------------------------------------------------
 # GColl
 gcoll=yes
 AC_ARG_ENABLE(gcoll,
@@ -1810,7 +1841,6 @@ AC_ARG_ENABLE(gcoll,
 if test $gcoll = yes; then
         AC_DEFINE([GCOLL], [1], [Build GColl mode])
 fi
-
 
 # -------------------------------------------------------------------------------------------------
 # We need to add libraries then
@@ -1868,6 +1898,7 @@ RESULT=\
   SAGE ........................ $sage
   SDL ......................... $sdl
   screen capture .............. $screen_cap
+  V4L2 ........................ $v4l2
 
   Portaudio ................... $portaudio
   ALSA ........................ $alsa
