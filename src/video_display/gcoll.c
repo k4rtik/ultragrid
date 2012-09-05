@@ -118,7 +118,7 @@ display_type_t *display_gcoll_probe(void)
 int display_gcoll_get_property(void *state, int property, void *val, size_t *len)
 {
         UNUSED(state);
-        codec_t codecs[] = { RGBA };
+        codec_t codecs[] = { RGB };
         enum interlacing_t supported_il_modes[] = {PROGRESSIVE, INTERLACED_MERGED, SEGMENTED_FRAME};
 
         switch (property) {

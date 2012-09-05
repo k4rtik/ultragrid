@@ -413,6 +413,7 @@ void * vidcap_v4l2_init(char *init_fmt, unsigned int flags)
         s->conversion_needed = false;
 
         switch(fmt.fmt.pix.pixelformat) {
+                /*
                 case V4L2_PIX_FMT_YUYV:
                         s->frame->color_spec = YUYV;
                         break;
@@ -428,6 +429,7 @@ void * vidcap_v4l2_init(char *init_fmt, unsigned int flags)
                 case V4L2_PIX_FMT_MJPEG:
                         s->frame->color_spec = JPEG;
                         break;
+                        */
                 default:
                         s->conversion_needed = true;
                         s->dst_fmt.fmt.pix.pixelformat =  V4L2_PIX_FMT_RGB24;
