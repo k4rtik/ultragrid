@@ -299,6 +299,10 @@ static void usage(void)
         printf("\t--cuda-device [<index>|help]\tuse specified CUDA device\n");
         printf("\n");
         printf("\n");
+        printf("\t-F                       \tGColl front camera\n");
+        printf("\t-S                       \tGColl side camera\n");
+        printf("\t-G                       \tGColl group camera camera (if present)\n");
+        printf("\t-R                       \tGColl roam ID\n");
         printf("\taddress(es)              \tdestination address\n");
         printf("\n");
         printf("\t                         \tIf comma-separated list of addresses\n");
