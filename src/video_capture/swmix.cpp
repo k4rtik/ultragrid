@@ -62,6 +62,8 @@
 #include "video_display.h"
 #include "video.h"
 
+#define MAX_AUDIO_LEN (1024*1024)
+
 using namespace std;
 
 typedef enum {
@@ -224,6 +226,9 @@ struct state_slave {
 
         struct video_frame *captured_frame;
         struct video_frame *done_frame;
+
+        bool                capture_audio;
+        struct audio_frame  audio_frame;
 };
 
 struct vidcap_swmix_state {
@@ -239,6 +244,10 @@ struct vidcap_swmix_state {
         struct video_frame *frame;
         char               *network_buffer;
         char               *completed_buffer;
+        char               *network_audio_buffer;
+        char               *completed_audio_buffer;
+        int                 completed_audio_buffer_len;
+        struct audio_frame  audio;
         queue<char *>       free_buffer_queue;
         pthread_cond_t      free_buffer_queue_not_empty_cv;
 
@@ -538,9 +547,24 @@ static void *master_worker(void *arg)
                         }
                 }
 
+                char *audio_data = NULL;
+                int audio_len = 0;
+
                 // load data
                 for(int i = 0; i < s->devices_cnt; ++i) {
                         if(s->slaves_data[i].current_frame) {
+                                if(field == 0 && s->slaves[i].capture_audio) {
+                                        s->audio.bps = s->slaves[i].audio_frame.bps;
+                                        s->audio.ch_count = s->slaves[i].audio_frame.ch_count;
+                                        s->audio.sample_rate = s->slaves[i].audio_frame.sample_rate;
+                                        if(s->slaves[i].audio_frame.data_len) {
+                                                audio_data = (char *) malloc(s->slaves[i].audio_frame.data_len);
+                                                audio_len = s->audio.data_len;
+                                                memcpy(audio_data, s->slaves[i].audio_frame.data,
+                                                                audio_len);
+                                                s->slaves[i].audio_frame.data_len = 0;
+                                        }
+                                }
                                 glBindTexture(GL_TEXTURE_2D, s->slaves_data[i].texture[0]);
                                 int width = s->slaves_data[i].current_frame->tiles[0].width;
                                 GLenum format;
@@ -696,6 +720,8 @@ static void *master_worker(void *arg)
                                 pthread_cond_wait(&s->frame_sent_cv, &s->lock);
                         }
                         s->completed_buffer = current_buffer;
+                        s->completed_audio_buffer = audio_data;
+                        s->completed_audio_buffer_len = audio_len;
                         current_buffer = NULL;
                         pthread_cond_signal(&s->frame_ready_cv);
                         pthread_mutex_unlock(&s->lock);
@@ -728,9 +754,9 @@ static void *slave_worker(void *arg)
 
         while(!s->should_exit) {
                 struct video_frame *frame;
-                struct audio_frame *unused_af;
+                struct audio_frame *audio;
 
-                frame = vidcap_grab_extrn(device, &unused_af);
+                frame = vidcap_grab_extrn(device, &audio);
                 if(frame) {
                         struct video_frame *frame_copy = vf_get_copy(frame);
                         pthread_mutex_lock(&s->lock);
@@ -738,6 +764,19 @@ static void *slave_worker(void *arg)
                                 vf_free_data(s->captured_frame);
                         }
                         s->captured_frame = frame_copy;
+                        if(s->capture_audio && audio) {
+                                int len = audio->data_len;
+                                if(len + s->audio_frame.data_len > s->audio_frame.max_size) {
+                                        len = s->audio_frame.max_size - s->audio_frame.data_len;
+                                        fprintf(stderr, "[SW Mix] Audio buffer overflow!\n");
+                                }
+                                memcpy(s->audio_frame.data + s->audio_frame.data_len, audio->data,
+                                                len);
+                                s->audio_frame.data_len += len;
+                                s->audio_frame.ch_count = audio->ch_count;
+                                s->audio_frame.bps = audio->bps;
+                                s->audio_frame.sample_rate = audio->sample_rate;
+                        }
                         pthread_mutex_unlock(&s->lock);
                 }
         }
@@ -937,6 +976,16 @@ static bool parse(struct vidcap_swmix_state *s, struct video_desc *desc, char *f
                 char *device_cfg = NULL;
                 char *name = NULL;
 
+                if(i == 0) {
+                        s->slaves[i].capture_audio = true;
+                        s->slaves[i].audio_frame.max_size = MAX_AUDIO_LEN;
+                        s->slaves[i].audio_frame.data = (char *)
+                                malloc(s->slaves[i].audio_frame.max_size);
+                        s->slaves[i].audio_frame.data_len = 0;
+                } else {
+                        s->slaves[i].capture_audio = false;
+                }
+
                 if(s->use_config_file == true) {
                         // we have device name and configuration
                         if(strchr(config, '@')) {
@@ -997,6 +1046,9 @@ vidcap_swmix_init(char *init_fmt, unsigned int flags)
 		printf("Unable to allocate swmix capture state\n");
 		return NULL;
 	}
+
+        s->completed_audio_buffer = NULL;
+        s->network_audio_buffer = NULL;
 
         s->frames = 0;
         s->slaves = NULL;
@@ -1205,8 +1257,14 @@ vidcap_swmix_grab(void *state, struct audio_frame **audio)
                 s->free_buffer_queue.push(s->network_buffer);
                 pthread_cond_signal(&s->free_buffer_queue_not_empty_cv);
         }
+        if(s->network_audio_buffer) {
+                free(s->network_audio_buffer);
+                s->network_audio_buffer = NULL;
+        }
         s->network_buffer = s->completed_buffer;
         s->completed_buffer = NULL;
+        s->network_audio_buffer = s->completed_audio_buffer;
+        s->audio.data_len = s->completed_audio_buffer_len;
         pthread_cond_signal(&s->frame_sent_cv);
         pthread_mutex_unlock(&s->lock);
 
@@ -1220,6 +1278,10 @@ vidcap_swmix_grab(void *state, struct audio_frame **audio)
             fprintf(stderr, "[swmix cap.] %d frames in %g seconds = %g FPS\n", s->frames, seconds, fps);
             s->t0 = s->t;
             s->frames = 0;
+        }
+
+        if(s->network_audio_buffer) {
+                *audio = &s->audio;
         }
 
 	return s->frame;
