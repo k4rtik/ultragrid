@@ -174,7 +174,7 @@ static void *master_worker(void *arg);
 static void *slave_worker(void *arg);
 static char *get_config_name(void);
 static bool parse(struct vidcap_swmix_state *s, struct video_desc *desc, char *fmt,
-                FILE **config_file);
+                FILE **config_file, unsigned int flags);
 static bool get_slave_param_from_file(FILE* config, char *slave_name, int *x, int *y,
                                         int *width, int *height);
 static bool get_device_config_from_file(FILE* config_file, char *slave_name,
@@ -223,6 +223,7 @@ struct state_slave {
         char               *name;
         char               *device_vendor;
         char               *device_cfg;
+        unsigned int        vidcap_flags;
 
         struct video_frame *captured_frame;
         struct video_frame *done_frame;
@@ -745,7 +746,7 @@ static void *slave_worker(void *arg)
         struct state_slave *s = (struct state_slave *) arg;
 
         struct vidcap *device =
-                initialize_video_capture(s->device_vendor, s->device_cfg, 0);
+                initialize_video_capture(s->device_vendor, s->device_cfg, s->vidcap_flags);
         if(!device) {
                 fprintf(stderr, "[swmix] Unable to initialize device %s (%s:%s).\n",
                                 s->name, s->device_vendor, s->device_cfg);
@@ -907,7 +908,7 @@ static int parse_config_string(const char *fmt, unsigned int *width,
 }
 
 static bool parse(struct vidcap_swmix_state *s, struct video_desc *desc, char *fmt,
-                FILE **config_file, interpolation_t *interpolation)
+                FILE **config_file, interpolation_t *interpolation, unsigned int vidcap_flags)
 {
         char *save_ptr = NULL;
         char *item;
@@ -982,8 +983,10 @@ static bool parse(struct vidcap_swmix_state *s, struct video_desc *desc, char *f
                         s->slaves[i].audio_frame.data = (char *)
                                 malloc(s->slaves[i].audio_frame.max_size);
                         s->slaves[i].audio_frame.data_len = 0;
+                        s->slaves[i].vidcap_flags = vidcap_flags;
                 } else {
                         s->slaves[i].capture_audio = false;
+                        s->slaves[i].vidcap_flags = 0;
                 }
 
                 if(s->use_config_file == true) {
@@ -1067,7 +1070,7 @@ vidcap_swmix_init(char *init_fmt, unsigned int flags)
         s->interpolation = BICUBIC;
         FILE *config_file = NULL;
 
-        if(!parse(s, &desc, init_fmt, &config_file, &s->interpolation)) {
+        if(!parse(s, &desc, init_fmt, &config_file, &s->interpolation, flags)) {
                 goto error;
         }
 
