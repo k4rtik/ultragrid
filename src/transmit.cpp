@@ -79,6 +79,11 @@
 #include "video_codec.h"
 #include "compat/platform_spin.h"
 
+#include <algorithm>
+#include <vector>
+
+using namespace std;
+
 #define TRANSMIT_MAGIC	0xe80ab15f
 
 #define FEC_MAX_MULT 10
@@ -154,7 +159,7 @@ struct tx {
 // Mulaw audio memory reservation
 static void init_tx_mulaw_buffer() {
     if (!buffer_mulaw_init) {
-        data_buffer_mulaw = malloc(BUFFER_MTU_SIZE);
+        data_buffer_mulaw = (char *) malloc(BUFFER_MTU_SIZE);
         buffer_mulaw_init = 1;
     }
 }
@@ -549,16 +554,8 @@ tx_send_base(struct tx *tx, struct video_frame *frame, struct rtp *rtp_session,
 
         int fec_symbol_offset = 0;
 
+        vector<pair<int,int>> positions;
         do {
-                if(tx->fec_scheme == FEC_MULT) {
-                        pos = mult_pos[mult_index];
-                }
-
-                int offset = pos + fragment_offset;
-
-                rtp_hdr[1] = htonl(offset);
-
-                data = tile->data + pos;
                 data_len = tx->mtu - hdrs_len;
                 if (frame->fec_params.type != FEC_NONE) {
                         if (fec_symbol_size <= tx->mtu - hdrs_len) {
@@ -575,12 +572,35 @@ tx_send_base(struct tx *tx, struct video_frame *frame, struct rtp *rtp_session,
                         data_len = (data_len / 48) * 48;
                 }
                 if (pos + data_len >= (unsigned int) tile->data_len) {
+                        data_len = tile->data_len - pos;
+                }
+
+                positions.push_back(pair<int, int>(pos, data_len));
+
+                pos += data_len;
+        } while (pos < (unsigned int) tile->data_len);
+
+        random_shuffle(positions.begin(), positions.end());
+
+        for (auto it = positions.begin(); it != positions.end(); ++it) {
+                if(tx->fec_scheme == FEC_MULT) {
+                        //pos = mult_pos[mult_index];
+                        abort();
+                }
+
+                pos = it->first;
+                data_len = it->second;
+
+                int offset = pos + fragment_offset;
+
+                rtp_hdr[1] = htonl(offset);
+
+                data = tile->data + pos;
+                if (it == --positions.end()) {
                         if (send_m) {
                                 m = 1;
                         }
-                        data_len = tile->data_len - pos;
                 }
-                pos += data_len;
                 GET_STARTTIME;
                 if(data_len) { /* check needed for FEC_MULT */
                         char encrypted_data[data_len + MAX_CRYPTO_EXCEED];
@@ -619,7 +639,7 @@ tx_send_base(struct tx *tx, struct video_frame *frame, struct rtp *rtp_session,
                         pos = mult_pos[tx->mult_count - 1];
                 }
 
-        } while (pos < (unsigned int) tile->data_len);
+        }
 }
 
 /* 
