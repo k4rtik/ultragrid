@@ -1429,9 +1429,13 @@ then
         RESIZE_OBJ="src/capture_filter/resize.o src/capture_filter/resize_utils.o"
         AC_SUBST(VCAPTURE_FILTER_RESIZE_LIB_TARGET, "lib/ultragrid/module_vcapfilter_resize.so")
 
-        LIB_TARGETS="$LIB_TARGETS $VCAPTURE_FILTER_RESIZE_LIB_TARGET"
-        LIB_OBJS="$LIB_OBJS $RESIZE_OBJ"
-        LIB_MODULES="$LIB_MODULES $RESIZE_LIBS"
+        AC_SUBST(VCAPTURE_FILTER_ANONYMIZE_LIB_TARGET, "lib/ultragrid/module_vcapfilter_anonymize.so")
+        ANONYMIZE_LIB="-ltesseract -llept -ltre ${OPENCV_LIBS}"
+        ANONYMIZE_OBJ="src/capture_filter/anonymize.o"
+
+        LIB_TARGETS="$LIB_TARGETS $VCAPTURE_FILTER_RESIZE_LIB_TARGET $VCAPTURE_FILTER_ANONYMIZE_LIB_TARGET"
+        LIB_OBJS="$LIB_OBJS $RESIZE_OBJ $ANONYMIZE_OBJ"
+        LIB_MODULES="$LIB_MODULES $RESIZE_LIBS $ANONYMIZE_LIB"
         resize=yes
 fi
 
@@ -1442,6 +1446,8 @@ fi
 AC_SUBST(RESIZE_LIBS)
 AC_SUBST(RESIZE_OBJ)
 
+AC_SUBST(ANONYMIZE_LIB)
+AC_SUBST(ANONYMIZE_OBJ)
 
 
 # -------------------------------------------------------------------------------------------------

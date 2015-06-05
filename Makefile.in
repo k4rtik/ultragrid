@@ -658,6 +658,10 @@ rtsp_server: @RTSP_SERVER_LIB_TARGET@
 @LDGM_GPU_LIB_TARGET@: @LDGM_GPU_OBJS@
 	$(LINKER) $(LDFLAGS) -shared -Wl,-soname,module_ldgm_gpu.so $^ @LDGM_GPU_LIBS@ -o $@
 
+@VCAPTURE_FILTER_ANONYMIZE_LIB_TARGET@: @ANONYMIZE_OBJ@
+	mkdir -p lib/ultragrid
+	$(LINKER) $(LDFLAGS) -shared -Wl,-soname,vidcap_anonymize.so.@vcapture_filter_abi_version@ $^ @ANONYMIZE_LIB@ -o $@
+
 install: all
 	$(INSTALL) -d -m 755 $(DESTDIR)/$(bindir)
 	$(INSTALL) -m 755 bin/uv $(DESTDIR)/$(bindir)

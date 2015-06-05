@@ -1125,6 +1125,21 @@ void vc_copylineUYVYtoRGB(unsigned char *dst, const unsigned char *src, int dst_
 }
 
 /**
+ * @brief Converts UYVY to grayscale.
+ * @todo is this correct??
+ */
+void vc_copylineUYVYtoGrayscale(unsigned char *dst, const unsigned char *src, int dst_len) {
+        while(dst_len > 0) {
+                src++; // U
+                *dst++ = *src++; // Y
+                src++; // V
+                *dst++ = *src++; // Y
+
+                dst_len -= 2;
+        }
+}
+
+/**
  * @brief Converts RGB to UYVY.
  * Uses full scale Rec. 601 YUV (aka JPEG)
  * @copydetails vc_copylinev210
